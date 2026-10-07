@@ -1,12 +1,86 @@
-# Monitor de peças
+# Monitor de preços
 
-Aplicativo local para acompanhar RTX 5060 de fabricantes variados, Corsair CX750 e Kingston NV3 1 TB. Permite cadastrar outras peças, selecionar grupos e configurar limite por Pix ou total parcelado.
+Aplicativo local para acompanhar ofertas de peças de computador. A instalação inicial inclui buscas para RTX 5060, Corsair CX750 e Kingston NV3 1 TB; outras peças e buscas da OLX podem ser cadastradas no painel.
+
+## Requisitos
+
+- Windows 10 ou 11 e Python 3.12 ou superior. A versão precisa estar disponível pelo launcher `py` (`py -3.12`).
+- Git para clonar o repositório.
+- Node.js somente para executar o teste da interface cloud (`tests/test_cloud_ui.js`).
+- Google Chrome é necessário para os fluxos de sessão e fallback do Mercado Livre, Shopee e OLX. O painel local e os coletores HTTP não dependem de login no Chrome.
+- Acesso à internet para instalar dependências e consultar as lojas/serviços configurados.
+
+## Instalação e primeira execução
+
+No PowerShell:
+
+```powershell
+git clone https://github.com/andreltcarvalho/monitor-precos.git
+cd monitor-precos
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+Também é possível executar `Instalar.cmd`, que cria o ambiente virtual com Python 3.12 e instala `requirements.txt`. Se o projeto já estiver clonado, pule os dois primeiros comandos.
+
+Inicie com:
+
+```powershell
+.Iniciar-Monitor.cmd
+```
+
+O painel abre em <http://127.0.0.1:8765>. Para confirmar que o servidor local está ativo, consulte <http://127.0.0.1:8765/health>; a resposta inclui `running`. Use **Encerrar** no painel para parar o processo. Fechar a aba do navegador não encerra o monitor. O processo precisa continuar ativo, e o PC sem suspensão, para os ciclos locais funcionarem.
+
+O monitor cria `data/monitor.sqlite3` e demais arquivos de estado em `data/` na primeira execução. Essa pasta contém ofertas, histórico, perfis de navegador e credenciais/sessões locais; mantenha-a privada e fora do Git. Para começar com um banco limpo, pare o monitor e faça backup antes de remover dados locais.
+
+## Configuração opcional de integrações
+
+- **Telegram:** pare o monitor, execute `Conectar-Telegram.cmd`, informe as credenciais da API e conclua o login no terminal. Depois inicie o monitor e selecione os grupos existentes na aba **Fontes**. Consulte [Conectar Telegram](#conectar-telegram) para os detalhes.
+- **Mercado Livre e Shopee:** entre pelo Chrome próprio do monitor e confirme a sessão na aba **Fontes**. O Chrome pessoal e seus cookies não são importados. Consulte as seções [Mercado Livre](#conectar-mercado-livre) e [Shopee](#conectar-shopee).
+- **OLX:** cadastre uma busca em **Usados**. A consulta usa HTTP e pode recorrer ao Chrome com perfil local próprio quando houver bloqueio. Ver [Acompanhar usados na OLX](#acompanhar-usados-na-olx).
+- **Painel cloud:** o painel publicado é opcional; o aplicativo local funciona sem conta cloud. Para conectar ou hospedar sua própria instância, siga [Painel na Vercel e coletor no PC](#painel-na-vercel-e-coletor-no-pc).
+
+## Arquitetura e arquivos principais
+
+O projeto tem duas partes: o coletor/painel local em Python com NiceGUI e SQLite, e um painel cloud FastAPI hospedado na Vercel com autenticação e dados no Supabase. O coletor local continua responsável pelos fluxos que precisam das sessões do usuário.
+
+| Caminho | Responsabilidade |
+| --- | --- |
+| `app.py` | Inicializa o painel local em `127.0.0.1:8765`, a persistência e o monitor. |
+| `monitor.py`, `core.py` | Ciclos de coleta, regras de ofertas, histórico e armazenamento SQLite. |
+| `shops.py`, `mercado_livre_browser.py`, `shopee_browser.py`, `olx.py` | Coletores e integrações de lojas/fontes. |
+| `cloud/` | API FastAPI, interface web, repositório Supabase e esquemas SQL do painel cloud. |
+| `tests/` | Testes Python, teste JavaScript da interface cloud e validação SQL do agendamento. |
+| `requirements.txt` | Dependências do monitor local. |
+| `pyproject.toml` | Dependências e entrypoint do serviço cloud na Vercel. |
+| `Instalar.cmd`, `Iniciar-Monitor.cmd`, `Conectar-Telegram.cmd`, `Conectar-Nuvem.cmd` | Atalhos de instalação, execução e configuração no Windows. |
+| `data/`, `.venv/`, `tmp/` | Estado local, ambiente virtual e arquivos temporários; não versionar. |
+
+Não há arquivo `.env` necessário para rodar o monitor local. O teste e as integrações cloud usam as configurações próprias descritas nas seções correspondentes.
+
+## Desenvolvimento e validação
+
+Ative o ambiente virtual existente ou chame seus executáveis diretamente. Comandos usados pelo projeto:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+.\.venv\Scripts\python.exe -m compileall -q app.py cloud core.py cloud_protocol.py cloud_sync.py configure_cloud.py configure_telegram.py credentials.py forms.py mercado_livre_browser.py ml_coupon_applicator.py monitor.py olx.py olx_ui.py presentation.py shopee_browser.py shops.py scripts tests
+node tests/test_cloud_ui.js
+```
+
+Os testes Python não precisam de contas reais ou consultas a lojas. O teste JavaScript da UI usa Node.js e não abre navegador. `tests/cloud_schedule.sql` é uma validação separada do agendamento Supabase; requer um projeto Supabase configurado e roda dentro de transação revertida. Testes controlados não comprovam que uma loja aceite uma sessão ou consulta real.
+
+Ao contribuir, mantenha credenciais, cookies, perfis do navegador e bancos locais fora do commit; confira `git status` antes de publicar. Registre limitações de fontes como bloqueios ou verificações humanas, sem tratá-las como ausência de ofertas.
+
+## Comportamento do monitor
 
 Os avisos só são enviados para ofertas entre os **10% mais baratos da mesma peça**, comparando o mesmo pagamento. O limite individual continua sendo uma condição adicional. Com até dez anúncios comparáveis, só o menor preço qualifica; com vinte, os dois menores. Empates no preço de corte qualificam. Anúncios indisponíveis, sem preço positivo e repetições agrupadas não aumentam a amostra. Os demais anúncios dentro do limite de preço continuam no painel sem gerar aviso.
 
-## Abrir
+Os avisos só são enviados para ofertas entre os **10% mais baratos da mesma peça**, comparando o mesmo pagamento. O limite individual continua sendo uma condição adicional. Com até dez anúncios comparáveis, só o menor preço qualifica; com vinte, os dois menores. Empates no preço de corte qualificam. Anúncios indisponíveis, sem preço positivo e repetições agrupadas não aumentam a amostra. Os demais anúncios dentro do limite de preço continuam no painel sem gerar aviso.
 
-Nesta máquina, as dependências já estão instaladas. Abra `Iniciar-Monitor.cmd` e acesse http://127.0.0.1:8765. Fechar a aba mantém o monitor ativo; use **Encerrar** para parar.
+## Painel publicado e coletor local
+
+Para iniciar o painel local, siga [Instalação e primeira execução](#instalação-e-primeira-execução). Fechar a aba mantém o monitor ativo; use **Encerrar** para parar.
 
 ## Painel na Vercel e coletor no PC
 
@@ -53,8 +127,6 @@ Avisos explicam por que a oferta qualificou. A mesma oferta/modelo na mesma loja
 A seleção rejeita acessórios, kits e capacidades incompatíveis. Registros antigos incompatíveis ficam preservados no banco e saem das comparações normais.
 
 Anúncios com o mesmo título completo e vendedor na mesma loja ficam em um cartão; na Pichau, o sufixo final `-NAC` não cria outro modelo. Variantes como White/V2, vendedores e lojas diferentes continuam separados. O cartão usa o menor preço disponível; links originais e histórico continuam em **Detalhes**, sem excluir registros salvos.
-
-Em uma instalação nova, use Python 3.12 e execute `Instalar.cmd` antes de iniciar.
 
 ## Acompanhar usados na OLX
 
@@ -112,14 +184,9 @@ A sessão fica em `data`, restrita ao seu usuário e SYSTEM. API ID/hash são pr
 
 ## Validação
 
-Frontend desktop: filtros recolhíveis/removíveis, comparação compacta acessível ao rolar, foco e paginação por teclado, proteção de rascunho e resultados por loja. Cupons mostram contagem de publicações, horários de publicação/consulta e conservam leitura aberta durante atualizações. Histórico explica pagamento selecionado e apresenta datas/valores em português. Rodadas atuais, capturas e distinção entre validação real e testes controlados: `UX-ITERATIONS.md`.
+Os comandos reproduzíveis de testes e compilação estão em [Desenvolvimento e validação](#desenvolvimento-e-validação). O estado e as evidências de validação de interface ficam em `UX-ITERATIONS.md`; elas distinguem testes controlados de consultas e sessões reais.
 
-` .venv\Scripts\python.exe -m unittest discover -s tests -v `
-
-347 testes passaram, incluindo consulta de water cooler com 360mm, alternativa nacional quando a busca Mercado Livre não oferece Local, atualização exclusiva de uma peça, vencimento de leituras, cupons por observação, fonte pública e limite das 12 ofertas, além de sessão persistente do Mercado Livre, alternativa com janela após 403, cupom explícito, ordenação e agrupamento, identificação/exclusão de marcas, migrações preservando dados, consulta do Mercado Livre por último e exclusão de ofertas internacionais. Compilação Python sem erros. O último lote de interface teve detector visual sem achados. No coletor real, o NV3 retornou R$ 836,92 anunciado, R$ 753,23 com cupom e 12 parcelas de R$ 80,65; esse anúncio foi depois identificado como internacional e excluído do catálogo. O navegador real confirmou cupom separado, ordenação pelo desconto, horários das consultas e exclusão/restauração de INNO3D pelo formulário. A seleção temporária de teste foi removida ao final. A leitura desconsidera anúncios do cartão Mercado Pago que antes podiam ser confundidos com o preço do produto.
-
-No navegador real: cartões, ordenação, filtros, paginação, cadastro/edição sem salvar dados de teste, fontes, detalhes ao vivo, horários do ciclo, cópia e busca de cupons validados. Recepção de cupons reais do Telegram observada em três publicações; fontes reconectadas. O Windows aceitou o envio de aviso de teste, sem comprovação visual da exibição. Registros de cada lote e capturas estão em UX-ITERATIONS.md; retorno de foco após atualização e foco de campos inválidos conferidos nas rodadas 14 e 15.
-# Aplicação de cupons do Mercado Livre
+## Aplicação de cupons do Mercado Livre
 
 A confirmação oficial da inserção é preservada mesmo se o Mercado Livre mudar a página ou fechar o formulário após o envio. Também reconhece o redirecionamento pós-envio para `/cupons/active?source_page=int_input_code` como confirmação; abrir Meus cupons antes de enviar um código não comprova ativação. Sem esses sinais, a tentativa continua pendente e pode ser reavaliada enquanto o cupom for do dia atual. Texto técnico “spinner” não é tratado como resposta do cupom.
 
