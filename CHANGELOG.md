@@ -2,6 +2,8 @@
 
 ## 2026-10-07
 
+- Preparação para Vercel: `windows-toasts` fica restrito ao Windows, evitando a instalação de WinRT no Linux. `.vercelignore` exclui bancos, sessões, credenciais, arquivos temporários e metadados locais; `.vercel/` também é ignorado no Git. CLI autenticada e checkout vinculado ao projeto existente. Marcador de plataforma e exclusões verificados; 24 testes do monitor aprovados. Migração do painel/banco e novo deploy ainda pendentes.
+
 - Mercado Livre coleta preços diretamente dos cartões da busca: preço atual, vendedor, parcelas explícitas e preço com cupom, sem misturar preço anterior, saldo Mercado Pago ou outra opção de compra. Abre produto somente quando faltar preço, origem nacional ou pagamento exigido pelo teto; conferência manual preservada. Até 12 candidatos ordenados por preço com cupom, usando preço novo para reavaliar ofertas conhecidas fora do corte. 15 regressões novas; 461 testes aprovados e compilação limpa. Fluxo real com sessão própria e banco isolado, peça sem teto por pagamento: 12 ofertas nacionais e 12 preços com cupom, duas navegações (busca e Local), nenhuma página de produto. Cadastros de produção preservados.
 
 - Corrigida busca OLX por Piracicaba/SP quando o seletor de localização está indisponível: URL municipal direta, preservando consulta, preço máximo e categoria, aplicada também a cadastros existentes e ao botão/link de abertura. HTTP e Chrome confirmam a cidade pelo título de destino; nome da cidade no texto pesquisado não basta. Recomendações de outros municípios são descartadas antes de salvar. Seis testes novos, 28 específicos e 446 gerais aprovados; compilação limpa. Consulta real pelo Chrome confirmou a rota municipal, sem anúncios locais de “rtx 5060 ti” na leitura; monitor reiniciado e cadastro original consultado com sucesso.
@@ -112,3 +114,9 @@
 - Login local com diagnóstico específico por etapa, sem imprimir credenciais.
 - Login do Mercado Livre ajustado para Chrome normal, sem automação, após captcha ausente e consulta recusada com 403 na primeira tentativa. Usuário fecha a janela antes de confirmar; nenhum captcha é resolvido automaticamente. Autenticação e coleta real seguem pendentes.
 - Validação automatizada: 147 testes aprovados.
+# 2026-10-07 — painel cloud e ponte local
+
+- Painel/API FastAPI para Vercel, Supabase Auth e persistência isolada por conta/RLS. Catálogo por peça, teto, 12 ofertas, preferências/comparação, cadastros, fontes, histórico, cupons e OLX.
+- Consultas HTTP por peça e cupons públicos na nuvem. Fila persistente para Chrome/Telegram/OLX/aplicação de cupons no PC; agendamento cloud adiado.
+- Conexão local com DPAPI, renovação de sessão e exportação incremental de campos permitidos, sem enviar arquivos/sessões/credenciais. Sincronização preserva leituras cloud mais recentes, estados e histórico.
+- Dependências cloud separadas; arquivos privados excluídos do deploy e Git. 26 regressões novas, 487 testes gerais aprovados, RLS real e interface isolada validados.

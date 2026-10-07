@@ -1,5 +1,23 @@
 # Checkpoint de implementação
 
+## Vercel + Supabase — implementação, 2026-10-07
+
+Painel/API separados autorizados explicitamente na sessão de voz. Implementados em `cloud/`, sem SQLite/Chrome/loops no servidor. Supabase Auth por cookies HttpOnly e Data API com JWT verificado; esquema `cloud/schema.sql` aplicado por MCP ao projeto dedicado `xkvehpkqqnmbjqqtvwxw`. RLS em registros/comandos; testes transacionais reais confirmaram leitura própria, ausência de leitura/escrita/inserção de outra conta e intervalo de cinco minutos. Todas as linhas/contas sintéticas foram revertidas. Advisor de segurança sem alertas; apenas índices ainda não usados em projeto novo.
+
+Ponte opcional `cloud_sync.py`, conexão `Conectar-Nuvem.cmd`, tokens protegidos com DPAPI e exportação explícita de campos. Comandos só são recebidos após sincronizar configuração/ofertas; resultado da consulta/ativação continua sendo apresentado separadamente do processamento do pedido. Chrome, Telegram, OLX e cupons ML permanecem no PC; consultas HTTP online por peça e cupons públicos usam Vercel. Fontes excluídas e cupons anteriores reconciliados, histórico preservado.
+
+26 regressões novas, 487 testes gerais aprovados, compilação Python e sintaxe JavaScript verificadas. Chrome com dados simulados/banco isolado confirmou cartões, detalhes, edição do teto refletida no catálogo, cadastro de fonte e filtros dos cupons, sem erros JavaScript. Detector visual executado: aviso de borda de navegação, sem problema de cartão; caminho absoluto do CSS não foi resolvido pelo detector HTML.
+
+Dois previews e produção compilados no Linux usando somente dependências de `pyproject.toml`, sem WinRT. Produção publicada em `https://monitor-precos-snowy.vercel.app`, deployment `dpl_6DTaFBwbpcJfvDf5TRrfSex5Evce`: página/assets 200, `/health` configurado e `/api/catalog` 401 sem sessão. Variáveis Supabase configuradas na Vercel Preview/Production. Gitleaks: 76 arquivos preparados, sem segredos detectados; bancos, sessões, tokens/arquivos de ambiente fora do Git/deploy. Login e sincronização autenticados com a conta real do usuário ainda dependem de criar/confirmar a conta cloud e executar a conexão local; nenhum dado ou sessão de produção local foi alterado. Agendamento cloud adiado conforme pedido.
+
+## Vercel e Supabase — preparação, 2026-10-07
+
+MCP oficial configurado e autenticado, mas consultas do projeto continuaram em 403. Alternativa CLI autorizada pelo usuário: login independente concluído e acesso ao projeto `andreltcarvalho-projects/monitor-precos` confirmado. Checkout vinculado ao projeto `prj_UduW1b9cCJVICUZeSfhGVo1wla1D`, equipe `team_pGTE4vHkopp3XjalFFQi9Moa`; `.vercel/project.json` e `.env.local` criados pela CLI estão ignorados. Supabase `xkvehpkqqnmbjqqtvwxw` está acessível e saudável, sem tabelas no esquema público na última consulta; nenhuma migração ou importação realizada.
+
+Logs do deployment existente `monitor-precos-42vqx6hm7-andreltcarvalho-projects.vercel.app`, commit `a80c3d1`, confirmaram falha ao instalar WinRT no Linux. `requirements.txt` agora limita `windows-toasts` ao Windows; `.vercelignore` protege dados/sessões/credenciais e `.gitignore` protege `.vercel/`. Marcador avaliado para Linux e Windows, exclusões do Git e diff verificados, 24 testes específicos do monitor aprovados. Sem teste novo: alterações apenas de dependências/exclusões, validadas diretamente. Não houve novo deploy nem alteração do monitor em execução.
+
+Escolha pendente apresentada ao usuário: painel web separado com API por requisição e login (recomendado), ou tentativa de manter NiceGUI com conexão persistente na Vercel. O app atual instancia SQLite em `data/`, aceita apenas hosts locais e inicia loops contínuos; banco persistente, autenticação e execução por requisição precisam ser tratados antes de publicar. Chrome/Telegram permanecem no PC, agendamento adiado conforme escopo anterior.
+
 ## Mercado Livre — cartões da busca, 2026-10-07
 
 Escolha confirmada: busca como fonte principal, produto somente quando faltar informação necessária aos filtros e conferência manual preservada. `Shops._search_page` reaproveita consultas/filtro Local sem alterar contrato de `discover`; `discover_mercado_livre` fornece candidatos com leituras dos cartões quando reconhecidos. Parser usa campos reais poly-card: preço atual separado do antigo, centavos, vendedor, parcelas e preço explicitamente “com Cupom”; desconto condicionado ao saldo e área Outra opção de compra excluídos. Sem Pix presumido, sem origem nacional presumida quando filtro/indicação nacional faltam. Internacional descartado; layout/preço incompleto permanece candidato à conferência individual. Lê os cartões antes de selecionar até 12 pelo preço efetivo.

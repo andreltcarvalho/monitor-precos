@@ -8,6 +8,22 @@ Os avisos só são enviados para ofertas entre os **10% mais baratos da mesma pe
 
 Nesta máquina, as dependências já estão instaladas. Abra `Iniciar-Monitor.cmd` e acesse http://127.0.0.1:8765. Fechar a aba mantém o monitor ativo; use **Encerrar** para parar.
 
+## Painel na Vercel e coletor no PC
+
+O painel da nuvem usa FastAPI por requisição e Supabase Auth/Data API, com dados isolados por conta por RLS. Não depende do SQLite ou do Chrome no servidor. O painel local continua disponível normalmente.
+
+No [painel publicado](https://monitor-precos-snowy.vercel.app), crie sua conta, confirme o e-mail e entre. Depois execute `Conectar-Nuvem.cmd` na pasta do monitor, informe `https://monitor-precos-snowy.vercel.app` e o login dessa conta, e reinicie o monitor local. A senha não é salva: os tokens de sessão/renovação ficam em `data/cloud-credentials.bin`, protegidos pelo Windows/DPAPI. Não copie esse arquivo para outro computador.
+
+O PC sincroniza a cada minuto cadastros, ofertas, leituras históricas, fontes, cupons e buscas da OLX. A exportação usa uma lista explícita de campos; arquivos, cookies, perfis do Chrome, telefone e credenciais do Telegram não são enviados. Após conectar, faça as alterações de peças, fontes e preferências pelo painel da nuvem; essas alterações são aplicadas ao monitor local.
+
+**Buscar ofertas desta peça** consulta Pichau, KaBuM, Amazon e Terabyte na Vercel, nas fontes ativas. Essas consultas usam os parsers existentes, têm duração limitada e um intervalo mínimo de cinco minutos por peça. Bloqueios preservam o histórico e aparecem no resultado da consulta. Mercado Livre e Shopee recebem um pedido na fila para consulta no PC; o Mercado Livre permanece por último nessa consulta local. OLX, recebimento do Telegram e aplicação de cupons também permanecem no PC, com suas sessões atuais. Pedidos feitos com o PC desconectado aguardam na aba **Atividade**.
+
+O catálogo mantém o limite de 12 por peça, agrupamento, ordenação pelo preço com cupom e limite de pagamento cadastrado. O histórico da nuvem considera até 10.000 leituras por consulta e sinaliza quando fica parcial. **Cupons** mostra os códigos de hoje, estados e motivos/retentativas, e permite consultar as fontes públicas pela nuvem; ativação do Mercado Livre é executada no PC.
+
+O agendamento automático das consultas online fica para uma próxima etapa. Publicar na Vercel não inicia um processo contínuo; por enquanto a consulta cloud é acionada pelo botão. Os ciclos locais já existentes continuam funcionando enquanto o monitor estiver aberto.
+
+Para outro deploy, configure `SUPABASE_URL` e `SUPABASE_PUBLISHABLE_KEY` nos ambientes Preview/Production da Vercel. O entrypoint está em `pyproject.toml`, `cloud.app:app`; as dependências cloud também estão nesse arquivo. `cloud/schema.sql` contém o esquema aplicado ao Supabase. Não use chave administrativa no frontend ou no coletor. `.vercelignore` e `.gitignore` excluem bancos, sessões, arquivos de ambiente e dados locais.
+
 As ofertas ficam agrupadas por peça em seções recolhíveis, com **até 12 ofertas mais baratas por peça**, somando todas as lojas e agrupando duplicados, em duas páginas de seis cartões. O teto da peça é aplicado antes do corte, e o corte acontece antes dos filtros de texto, loja e conferência; filtrar uma loja não traz anúncios acima dele. Cada cartão destaca modelo, loja, preço Pix quando informado, parcelamento e **Ver oferta**. **Detalhes** reúne nome completo, vendedor, horários, histórico e conferência do preço. **Estado das fontes** mostra os diagnósticos completos.
 
 Anúncios conhecidos acima do 12º preço deixam de ser consultados automaticamente, sem apagar registros/histórico. Uma nova publicação com preço menor pode entrar; um link novo sem preço exige uma primeira leitura para decidir. Revalidação dos selecionados usa o último preço base conhecido quando a leitura vence, sem reutilizar cupom vencido. Conferência manual continua disponível. Ofertas esgotadas e marcas ignoradas não ocupam as 12 posições.

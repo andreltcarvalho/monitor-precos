@@ -1,13 +1,13 @@
+.git/
 .venv/
 .cache/
+.impeccable/
+.vercel/
 data/
 tmp/
 __pycache__/
+**/__pycache__/
 *.pyc
-.impeccable/
-.vercel/
-
-# Configuração privada, sessões, bancos e capturas locais.
 .env
 .env.*
 *.session

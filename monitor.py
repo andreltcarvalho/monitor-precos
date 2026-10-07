@@ -16,6 +16,7 @@ from credentials import load_credentials
 from shops import SHOP_NAMES, Shops, shop_name
 from ml_coupon_applicator import CouponApplicator
 from olx import OlxMonitor
+from cloud_sync import CloudSync
 
 LOG = logging.getLogger('monitor')
 
@@ -62,13 +63,14 @@ class Monitor:
         self.next_ml_scan = 0
         self.next_coupon_scan = 0
         self.coupon_status = 'Melhores Cartões · aguardando primeira consulta'
+        self.cloud = CloudSync(self, data_dir)
 
     async def start(self):
         self.store.prune_coupons()
         self.running = True
         self.tasks = [asyncio.create_task(self.check_worker()), asyncio.create_task(self.shop_loop()),
                       asyncio.create_task(self.telegram_loop()), asyncio.create_task(self.ml_coupons.loop()),
-                      asyncio.create_task(self.olx.loop())]
+                      asyncio.create_task(self.olx.loop()), asyncio.create_task(self.cloud.loop())]
 
     async def stop(self):
         self.running = False
@@ -327,7 +329,7 @@ class Monitor:
             await self.scan_shops()
             await asyncio.sleep(max(0, 600 - (monotonic() - started)))
 
-    async def scan_shops(self, force_ml: bool = False, component_id: int | None = None):
+    async def scan_shops(self, force_ml: bool = False, component_id: int | None = None, shops: tuple | None = None):
         if self.shop_lock.locked():
             return
         if component_id is not None and not any(part['id'] == component_id and part['enabled'] for part in self.store.components()):
@@ -336,6 +338,8 @@ class Monitor:
             self.shop_scan_component_id = component_id
             self.last_shop_scan_started = utcnow()
             order = [name for name in SHOP_NAMES if name != 'Mercado Livre'] + ['Mercado Livre']
+            if shops is not None:
+                order = [name for name in order if name in shops]
             for shop in order:
                 if shop == 'Mercado Livre':
                     now = monotonic()
