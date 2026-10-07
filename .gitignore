@@ -1,0 +1,26 @@
+.venv/
+.cache/
+data/
+tmp/
+__pycache__/
+*.pyc
+.impeccable/
+
+# Configuração privada, sessões, bancos e capturas locais.
+.env
+.env.*
+*.session
+*.session-journal
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.sqlite3-*
+*.db
+*.db-*
+*.log
+*.har
+storage_state*.json
+*.pem
+*.key
+*.pfx
+*.p12
