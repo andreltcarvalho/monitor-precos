@@ -1,5 +1,13 @@
 # Checkpoint de implementação
 
+## Agendamento Supabase — publicado, 2026-10-07
+
+Pedido autorizado: consultas HTTP automáticas sem usar agendamento da Vercel. `cloud/collection.py` compartilha a coleta existente entre botão e `/api/scheduled/collect`, limitado às quatro lojas HTTP e autenticado por segredo exclusivo. O segredo foi configurado na Vercel Production/Preview e no Vault Supabase, sem chave administrativa de banco na aplicação. `cloud/schedule.sql` aplicado pelo plugin; pg_cron/pg_net habilitados. Funções internas com invoker e search_path vazio, fora da Data API; ledger com RLS e somente leitura da própria conta. Esquemas internos net/Vault permanecem fora da API.
+
+Job `monitor-precos-cloud-searches` ativo a cada minuto: até dois lotes por execução, dez minutos entre buscas da mesma peça/loja, pausas/exclusões e janela de consulta manual respeitadas. Supabase recebe e persiste as respostas; não sobrescreve um preço mais recente e preserva histórico em erros/timeout. Consultas encerram em 120 s, timeout HTTP de 140 s e recuperação de órfãs após quatro minutos. Chrome/Telegram/OLX/aplicação de cupons permanecem no PC.
+
+Validação: 494 testes Python aprovados, incluindo sete novas regressões; `tests/cloud_schedule.sql` validou no projeto real persistência, preço antigo, atomicidade, timeout, isolamento, intervalo, teto por rodada e pausas, com rollback integral e nenhuma requisição sintética enviada. Preview e produção compilados no Linux. Produção manual `dpl_C8KsRyMRgPdStbccR2EVcf1M48cp`, alias `https://monitor-precos-snowy.vercel.app`: health configurado, endpoint sem segredo 401/com segredo e lote inválido 422, catálogo anônimo 401. Ciclo real Cron → Vercel → Supabase retornou HTTP 200 e cinco leituras da Amazon persistidas, com duas execuções automáticas do Cron confirmadas. Pichau/Terabyte falharam na primeira consulta; essas falhas foram registradas sem apagar histórico. KaBuM concluiu sem anúncios consultados nessa rodada. Advisor sem alertas novos do esquema; existe aviso de proteção de senhas vazadas desabilitada no Auth. Dados locais e sessões Chrome não foram modificados.
+
 ## Vercel + Supabase — implementação, 2026-10-07
 
 Painel/API separados autorizados explicitamente na sessão de voz. Implementados em `cloud/`, sem SQLite/Chrome/loops no servidor. Supabase Auth por cookies HttpOnly e Data API com JWT verificado; esquema `cloud/schema.sql` aplicado por MCP ao projeto dedicado `xkvehpkqqnmbjqqtvwxw`. RLS em registros/comandos; testes transacionais reais confirmaram leitura própria, ausência de leitura/escrita/inserção de outra conta e intervalo de cinco minutos. Todas as linhas/contas sintéticas foram revertidas. Advisor de segurança sem alertas; apenas índices ainda não usados em projeto novo.

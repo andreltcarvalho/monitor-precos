@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from cloud.repository import Repository, configuration, user_session
+from cloud.collection import collect_shop, ScheduledReadings
 from cloud_protocol import CLOUD_SHOPS, LOCAL_SHOPS, PUBLIC_SETTINGS, SYNC_KINDS, catalog, offer_key
 from core import BRAND_ALIASES, canonical_url, confirmed_price, coupon_is_today, detect_brand, effective_price, matches, offer_matches, price_is_current, reading_valid_until, top_offers, tracking_price, utcnow, valid_url
 from forms import component_input_errors
@@ -321,54 +322,38 @@ async def scan(identifier: int, repo=Depends(repository)):
         for name in CLOUD_SHOPS:
             if settings.get('shop:' + name, '1') != '1':
                 continue
-            count, failures = 0, 0
-            try:
-                async with asyncio.timeout(max(1, 220-(asyncio.get_running_loop().time()-started))):
-                    candidates = await collectors.discover(name, part)
-                    for url in candidates[:12]:
-                        old = next((o for o in known if canonical_url(o['url']) == canonical_url(url)), None)
-                        cut = top_offers([part], known, tracking_price).get(identifier, [])
-                        if old and (old.get('hidden') or len(cut) == 12 and tracking_price(old) > tracking_price(cut[-1])):
-                            continue
-                        try:
-                            reading = await collectors.check(url, part)
-                            key = offer_key(identifier, reading['url'])
-                            row = dict(reading, id=key, component_id=identifier,
-                                       brand=reading.get('brand') or detect_brand(reading['title']),
-                                       valid_until=reading_valid_until(reading))
-                            prior = await repo.get('offers', key)
-                            if prior:
-                                row['published_at'] = prior.get('published_at', row.get('published_at'))
-                                row['origins'] = prior.get('origins') or name
-                            else:
-                                row['origins'] = name
-                            new_cut = top_offers([part], known, tracking_price).get(identifier, [])
-                            if not old and len(new_cut) == 12 and effective_price(row) > tracking_price(new_cut[-1]):
-                                continue
-                            stamp = row.get('checked_at') or utcnow()
-                            observation = {field: row.get(field) for field in ('pix', 'card', 'announced', 'coupon_price', 'status', 'availability')}
-                            observation.update(offer_id=key, observed_at=stamp)
-                            await repo.put_many([{'kind': 'offers', 'record_key': key, 'data': row},
-                                {'kind': 'observations', 'record_key': key + ':' + stamp, 'data': observation}])
-                            known = [o for o in known if o['id'] != key] + [row]
-                            count += 1
-                        except (httpx.HTTPError, ValueError):
-                            failures += 1
-                            if old:
-                                await repo.put('offers', old['id'], dict(old, valid_until=None, status='Falha na revalidação · anúncio preservado'))
-            except (ValueError, httpx.HTTPError, TimeoutError):
-                failures += 1
-            detail = f'{count} ofertas consultadas' + (' · algumas leituras falharam' if failures else '')
-            if not count and failures:
-                detail = 'Consulta bloqueada, indisponível ou sem anúncios legíveis; histórico preservado.'
-            status = {'name': name, 'component_id': identifier, 'count': count, 'failures': failures, 'detail': detail, 'checked_at': utcnow()}
+            status = await collect_shop(collectors, repo, part, known, name,
+                                        max(1, 220-(asyncio.get_running_loop().time()-started)))
             statuses.append(status)
-            await repo.put('status', 'cloud:' + name + ':' + str(identifier), status)
     finally:
         await collectors.close()
     if any(settings.get('shop:' + name, '1') == '1' for name in LOCAL_SHOPS):
         await repo.command('scan', {'component_id': identifier})
     return {'status': statuses, 'detail': 'Consultas online concluídas. Lojas com Chrome serão consultadas pelo PC quando conectado.'}
+
+
+@app.post('/api/scheduled/collect')
+async def scheduled_collect(request: Request, data: dict = Body(...)):
+    secret = os.environ.get('MONITOR_CRON_SECRET', '')
+    if not secret:
+        raise HTTPException(503, 'Agendamento ainda não configurado.')
+    if not secrets.compare_digest(request.headers.get('authorization', ''), 'Bearer ' + secret):
+        raise HTTPException(401, 'Agendamento não autorizado.')
+    part, known, name = data.get('component'), data.get('offers'), data.get('shop')
+    if (not isinstance(part, dict) or type(part.get('id')) is not int or not part.get('enabled')
+            or part.get('kind') not in {'custom', 'gpu', 'psu', 'ssd'} or not isinstance(part.get('query'), str)
+            or name not in CLOUD_SHOPS or not isinstance(known, list) or len(known) > 500
+            or any(not isinstance(row, dict) or not isinstance(row.get('id'), str)
+                   or row.get('component_id') != part['id'] or not isinstance(row.get('url'), str)
+                   or not valid_url(row['url']) for row in known)):
+        raise HTTPException(422, 'Lote de agendamento inválido.')
+    repo = ScheduledReadings(known)
+    collectors = Shops()
+    try:
+        status = await collect_shop(collectors, repo, part, known, name, 120)
+    finally:
+        await collectors.close()
+    return {'records': list(repo.written.values()), 'status': status}
 
 
 @app.get('/api/used')
