@@ -22,7 +22,7 @@ from cloud_protocol import CLOUD_SHOPS, LOCAL_SHOPS, PUBLIC_SETTINGS, SYNC_KINDS
 from core import BRAND_ALIASES, canonical_url, confirmed_price, coupon_is_today, detect_brand, effective_price, matches, offer_matches, price_is_current, reading_valid_until, top_offers, tracking_price, utcnow, valid_url
 from forms import component_input_errors
 from ml_coupon_applicator import application_state
-from presentation import coupon_catalog
+from presentation import coupon_catalog, offer_card_data
 from shops import Shops, shop_name
 
 ASSETS = Path(__file__).parent / 'static'
@@ -156,7 +156,13 @@ async def get_catalog(repo=Depends(repository)):
     parts, offers = await components(repo), await values(repo, 'offers')
     prefs = {row['record_key']: row['data'] for row in await repo.records('preferences')}
     saved = [dict(row, **prefs.get(str(row['id']), {})) for row in offers]
-    return {'groups': catalog(parts, offers, prefs), 'components': parts, 'offers': saved,
+    for row in saved:
+        row['display'] = offer_card_data(row)
+    groups = catalog(parts, offers, prefs)
+    for group in groups:
+        for row in group['offers']:
+            row['display'] = offer_card_data(row)
+    return {'groups': groups, 'components': parts, 'offers': saved,
             'status': await values(repo, 'status'), 'commands': await repo.commands(),
             'offer_limit': 12, 'record_limit_reached': len(offers) >= 10000}
 

@@ -2,6 +2,8 @@
 
 ## 2026-10-07
 
+- Painel cloud reorganizado para desktop: navegação lateral, seleção de peça, seis cartões por página mantendo as 12 mais baratas, modelo/specs resumidos e preço/pagamento em destaque. Favoritos por estrela, comparação recolhida e informações completas no diálogo. Peças abre na lista, cadastros de peças/grupos/OLX sob demanda; cupons mostram loja/estado e preservam condições abertas. Diretrizes de divulgação progressiva NN/g e estrutura W3C aplicadas. 495 testes Python aprovados, regressões JavaScript e validação isolada pelo navegador; coleta, histórico, credenciais e dados locais preservados.
+
 - Consultas HTTP automáticas via Supabase Cron/pg_net e endpoint autenticado na Vercel, sem Vercel Cron ou chave administrativa na aplicação. Até dois lotes peça/loja por minuto, intervalo mínimo de dez minutos, pausas/exclusões e consultas manuais respeitadas. Persistência de histórico por conta, proteção contra leituras antigas, encerramento de timeouts e preservação das ofertas em falhas. 494 testes aprovados e testes SQL transacionais revertidos; ciclo real em produção salvou cinco leituras da Amazon e confirmou execuções automáticas do Cron. Mercado Livre, Shopee, OLX, Telegram e aplicação de cupons continuam locais.
 
 - Preparação para Vercel: `windows-toasts` fica restrito ao Windows, evitando a instalação de WinRT no Linux. `.vercelignore` exclui bancos, sessões, credenciais, arquivos temporários e metadados locais; `.vercel/` também é ignorado no Git. CLI autenticada e checkout vinculado ao projeto existente. Marcador de plataforma e exclusões verificados; 24 testes do monitor aprovados. Migração do painel/banco e novo deploy ainda pendentes.

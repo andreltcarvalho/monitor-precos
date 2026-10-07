@@ -1,5 +1,15 @@
 # Checkpoint de implementação
 
+## UX do painel cloud — 2026-10-07
+
+Escopo: melhorar a versão publicada para desktop, preservando a coleta e as regras de preço. Pesquisa: divulgação progressiva da NN/g (`https://www.nngroup.com/articles/progressive-disclosure/`) e estrutura/landmarks da W3C (`https://www.w3.org/WAI/tutorials/page-structure/`). Ajustes em `cloud/static/` e enriquecimento de apresentação em `/api/catalog` com o resumidor já existente em `presentation.py`.
+
+Navegação lateral, uma peça em foco, seis ofertas por página dentre as 12 do catálogo, preço e condição explícitos. Modelo resumido conserva variantes; título original e pagamentos completos continuam no diálogo. Comparação recolhida, favoritos por estrela, cadastros recolhidos; loja/estado dos cupons visíveis e condições abertas preservadas. “Recarregar preços salvos” distingue leitura do banco de “Buscar novas ofertas”.
+
+Validação: 495 testes Python aprovados, regressões JavaScript de paginação/corte/favoritos/grupo encontrado/pagamento com cupom e sintaxe limpa. Navegador em instância isolada `127.0.0.1:8767` com dados explicitamente fictícios: paginação, favorito, comparação, detalhes, Escape/foco, abertura/cancelamento de cadastro, filtro de falhas e fontes. Sem erros no console ou rolagem horizontal em duas larguras de desktop. Detector Impeccable sem achados nos três arquivos; CSS também examinado diretamente porque o caminho público `/assets/` não corresponde ao caminho no disco. Revisão independente aprovou após conter o aviso da barra lateral e corrigir a condição desconhecida do preço anunciado ML quando existe outro total no cartão. Nenhuma oferta fictícia enviada à produção e nenhum cadastro/Chrome/banco local modificado.
+
+Build de validação Linux: `dpl_9KAEWarjXWCUxzAPpC2F5RUpzNhk`, READY, health configurado e catálogo anônimo 401. Publicação final pelo repositório no mesmo projeto/alias `https://monitor-precos-snowy.vercel.app`; capturas isoladas ficam em `.impeccable/review/`, fora do Git e do deploy.
+
 ## Agendamento Supabase — publicado, 2026-10-07
 
 Pedido autorizado: consultas HTTP automáticas sem usar agendamento da Vercel. `cloud/collection.py` compartilha a coleta existente entre botão e `/api/scheduled/collect`, limitado às quatro lojas HTTP e autenticado por segredo exclusivo. O segredo foi configurado na Vercel Production/Preview e no Vault Supabase, sem chave administrativa de banco na aplicação. `cloud/schedule.sql` aplicado pelo plugin; pg_cron/pg_net habilitados. Funções internas com invoker e search_path vazio, fora da Data API; ledger com RLS e somente leitura da própria conta. Esquemas internos net/Vault permanecem fora da API.

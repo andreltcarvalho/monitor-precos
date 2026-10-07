@@ -180,6 +180,20 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(self.client.get('/assets/app.js').status_code, 200)
         self.assertEqual(self.client.get('/health').json()['mode'], 'cloud')
 
+    def test_catalog_has_compact_model_without_losing_original_or_payment(self):
+        title = 'Placa de Video Gigabyte GeForce RTX 5060 Windforce OC White, 8GB, GDDR7, SKU-123'
+        self.repo.data['offers', 'gpu'] = offer('gpu', None, title=title, shop='Mercado Livre',
+            announced=250000, coupon_price=230000, seller='Outra loja')
+        result = self.client.get('/api/catalog').json()
+        for row in (result['offers'][0], result['groups'][0]['offers'][0]):
+            self.assertEqual(row['title'], title)
+            self.assertEqual(row['display']['title'], 'Gigabyte RTX 5060 Windforce OC White')
+            self.assertEqual(row['display']['specs'], '8GB · GDDR7')
+            self.assertEqual(row['display']['seller'], 'Vendido por Outra loja')
+            self.assertEqual(row['display']['payment'], 'pagamento não informado')
+            self.assertTrue(row['display']['coupon_primary'])
+            self.assertIsNone(row['pix'])
+
     def test_scan_uses_active_http_sources_preserves_failures_and_queues_local(self):
         self.repo.request = AsyncMock(return_value=True)
         for shop in ('KaBuM', 'Amazon', 'Terabyte Shop'):
