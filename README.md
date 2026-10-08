@@ -66,6 +66,8 @@ Ative o ambiente virtual existente ou chame seus executáveis diretamente. Coman
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 .\.venv\Scripts\python.exe -m compileall -q app.py cloud core.py cloud_protocol.py cloud_sync.py configure_cloud.py configure_telegram.py credentials.py forms.py mercado_livre_browser.py ml_coupon_applicator.py monitor.py olx.py olx_ui.py presentation.py shopee_browser.py shops.py scripts tests
 node tests/test_cloud_ui.js
+node tests/test_cloud_auth_ui.js
+node tests/test_cloud_favorites_ui.js
 ```
 
 Os testes Python não precisam de contas reais ou consultas a lojas. O teste JavaScript da UI usa Node.js e não abre navegador. `tests/cloud_schedule.sql` é uma validação separada do agendamento Supabase; requer um projeto Supabase configurado e roda dentro de transação revertida. Testes controlados não comprovam que uma loja aceite uma sessão ou consulta real.

@@ -5,7 +5,7 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'
 const currency = value => value == null ? 'Não informado' : (value / 100).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
 const time = stamp => stamp && !Number.isNaN(Date.parse(stamp)) ? new Date(stamp).toLocaleString('pt-BR', {timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : 'Não informado';
 const safeLink = url => { try {const u=new URL(url); return u.protocol==='https:' && !u.username && !u.password ? u.href : ''; } catch {return '';} };
-const state = {tab:'offers', catalog:null, offers:new Map(), comparison:[], busy:new Set(), session:null, coupons:null, pages:new Map(), activeGroup:null,historyRequest:0,couponPage:0,activityPage:0,activityFilter:null};
+const state = {tab:'offers', catalog:null, offers:new Map(), comparison:[], busy:new Set(), session:null, coupons:null, pages:new Map(), activeGroup:null,historyRequest:0,couponPage:0,activityPage:0,activityFilter:null,pendingFavorites:new Set()};
 const icon = path => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg>`;
 const star = icon('m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z');
 const tabIcons={offers:'M4 6h16v14H4ZM8 6V4h8v2M8 10h8M8 14h5',parts:'M7 7h10v10H7ZM9 3v4m6-4v4M9 17v4m6-4v4M3 9h4m-4 6h4m10-6h4m-4 6h4',coupons:'M4 6h16v4a2 2 0 0 0 0 4v4H4v-4a2 2 0 0 0 0-4ZM13 6v3m0 3v1m0 3v2',history:'M4 4v16h16M7 15l4-4 4 2 5-7',used:'M4 10l8-6 8 6v10H4ZM9 20v-6h6v6',sources:'M12 12V5M5 19v-6h14v6M9 5h6M2 19h6m8 0h6',activity:'M3 12h4l3-7 4 14 3-7h4'};
@@ -112,7 +112,30 @@ function card(row) {
   const name=escapeHtml(title+' · '+row.shop),id=escapeHtml(row.id);
   const installment=row.installments&&row.installment?row.installments+'x de '+currency(row.installment):row.card!=null&&row.pix!=null?currency(row.card)+' no cartão':'';
   const detail=coupon?'Sem cupom: '+currency(base):installment;
-  return `<article class="offer-card ${selected?'selected':''}" aria-label="${name}"><div class="offer-top"><span class="offer-shop">${escapeHtml(row.shop)}</span><button class="favorite-button" data-action="favorite" data-id="${id}" aria-pressed="${!!row.favorite}" aria-label="${row.favorite?'Remover favorita':'Salvar oferta'}: ${name}" title="${row.favorite?'Remover favorita':'Salvar oferta'}">${star}</button></div><div class="offer-model"><h4 class="offer-title" title="${escapeHtml(row.title)}">${escapeHtml(title)}</h4>${display.specs?`<p class="offer-specs">${escapeHtml(display.specs)}</p>`:''}${display.seller?`<p class="offer-seller" title="${escapeHtml(display.seller)}">${escapeHtml(display.seller)}</p>`:''}</div><div class="price-block"><div class="offer-price">${currency(amount)}</div><p class="price-condition ${coupon?'coupon-price':''}">${payment}</p>${detail?`<p class="offer-payment">${escapeHtml(detail)}</p>`:''}</div><div class="offer-actions">${link?`<a class="offer-open" href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer" aria-label="Ver oferta: ${name}">Ver oferta ${icon('M7 17 17 7M7 7h10v10')}</a>`:''}<button class="text" data-action="details" data-id="${id}" aria-label="Detalhes: ${name}">Detalhes</button></div><div class="offer-preferences"><button class="text" data-action="compare" data-id="${id}" aria-pressed="${selected}" aria-label="${selected?'Remover comparação':'Comparar'}: ${name}"><span class="compare-box" aria-hidden="true"></span>${selected?'Selecionada':'Comparar'}</button>${row.hidden?`<button class="text" data-action="hidden" data-id="${id}">Restaurar</button>`:`<span class="offer-freshness ${!current?'stale':''}" title="${label} ${time(row.checked_at||row.received_at)}">${label} · ${age(row.checked_at||row.received_at)}</span>`}</div></article>`;
+  return `<article class="offer-card ${selected?'selected':''}" aria-label="${name}"><div class="offer-top"><span class="offer-shop">${escapeHtml(row.shop)}</span><button class="favorite-button" data-action="favorite" data-id="${id}" ${state.pendingFavorites.has(row.id)?'disabled aria-busy="true"':''} aria-pressed="${!!row.favorite}" aria-label="${row.favorite?'Remover favorita':'Salvar oferta'}: ${name}" title="${row.favorite?'Remover favorita':'Salvar oferta'}">${star}</button></div><div class="offer-model"><h4 class="offer-title" title="${escapeHtml(row.title)}">${escapeHtml(title)}</h4>${display.specs?`<p class="offer-specs">${escapeHtml(display.specs)}</p>`:''}${display.seller?`<p class="offer-seller" title="${escapeHtml(display.seller)}">${escapeHtml(display.seller)}</p>`:''}</div><div class="price-block"><div class="offer-price">${currency(amount)}</div><p class="price-condition ${coupon?'coupon-price':''}">${payment}</p>${detail?`<p class="offer-payment">${escapeHtml(detail)}</p>`:''}</div><div class="offer-actions">${link?`<a class="offer-open" href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer" aria-label="Ver oferta: ${name}">Ver oferta ${icon('M7 17 17 7M7 7h10v10')}</a>`:''}<button class="text" data-action="details" data-id="${id}" aria-label="Detalhes: ${name}">Detalhes</button></div><div class="offer-preferences"><button class="text" data-action="compare" data-id="${id}" aria-pressed="${selected}" aria-label="${selected?'Remover comparação':'Comparar'}: ${name}"><span class="compare-box" aria-hidden="true"></span>${selected?'Selecionada':'Comparar'}</button>${row.hidden?`<button class="text" data-action="hidden" data-id="${id}">Restaurar</button>`:`<span class="offer-freshness ${!current?'stale':''}" title="${label} ${time(row.checked_at||row.received_at)}">${label} · ${age(row.checked_at||row.received_at)}</span>`}</div></article>`;
+}
+
+function favoriteState(ids, enabled) {
+  if(!state.catalog)return;
+  for(const row of [...state.offers.values(),...state.catalog.groups.flatMap(group=>group.offers)]) {
+    if(ids.includes(row.id))row.favorite=enabled;
+  }
+}
+async function saveFavorite(id) {
+  const row=state.offers.get(id);if(!row||state.pendingFavorites.has(id))return;
+  const ids=[...new Set([id,...(row.duplicate_ids||[])])],before=new Map(ids.map(key=>[key,!!state.offers.get(key)?.favorite])),enabled=!row.favorite;
+  ids.forEach(key=>state.pendingFavorites.add(key));favoriteState(ids,enabled);renderOffers();
+  try {
+    for(const key of ids)await api('/api/preferences/'+key,{field:'favorite',enabled});
+    notice(enabled?'Oferta salva nas favoritas.':'Oferta removida das favoritas.');
+  } catch(error) {
+    for(const [key,value] of before)favoriteState([key],value);renderOffers();notice(error.message);
+    // Se só parte dos anúncios agrupados foi salva, ler a confirmação do servidor.
+    if(state.session)try {await reloadCatalog();}catch {}
+  } finally {
+    ids.forEach(key=>state.pendingFavorites.delete(key));
+    if(state.catalog){renderOffers();$$('[data-action=favorite]').find(button=>button.dataset.id===id)?.focus({preventScroll:true});}
+  }
 }
 
 function offerRows(group) {
@@ -372,9 +395,10 @@ document.addEventListener('click',async event=>{
   if(action==='offer-page'){state.pages.set(Number(id),Number(button.dataset.page));renderOffers();requestAnimationFrame(()=>{$('#piece-'+id)?.focus({preventScroll:true});$('#piece-'+id)?.scrollIntoView({block:'start'});});return;}
   if(action==='add-first-part'){await showTab('parts');addPart();return;}
   if(action==='compare'){const row=state.offers.get(id);if(state.comparison.includes(id))state.comparison=state.comparison.filter(key=>key!==id);else{if(state.comparison.length===3){notice('Compare até três ofertas.');return;}if(state.comparison.length&&state.offers.get(state.comparison[0]).component_id!==row.component_id){notice('Compare ofertas da mesma peça.');return;}state.comparison.push(id);}renderOffers();return;}
+  if(action==='favorite'){await saveFavorite(id);return;}
   await busy(button,async()=>{
     if(action==='scan'){state.busy.add(Number(id));renderOffers();try{const result=await api('/api/scan/'+id,{});notice(result.detail);await reloadCatalog();}finally{state.busy.delete(Number(id));renderOffers();}}
-    else if(action==='favorite'||action==='hidden'){const row=state.offers.get(id);const ids=row.duplicate_ids||[id];for(const key of ids)await api('/api/preferences/'+key,{field:action,enabled:!row[action]});if(action==='hidden'&&$('#offer-details').open)$('#offer-details').close();await reloadCatalog();notice(action==='favorite'?(row.favorite?'Oferta removida das favoritas.':'Oferta salva nas favoritas.'):(row.hidden?'Oferta restaurada.':'Oferta ocultada. Você pode restaurá-la em Ocultas.'));}
+    else if(action==='hidden'){const row=state.offers.get(id);const ids=row.duplicate_ids||[id];for(const key of ids)await api('/api/preferences/'+key,{field:action,enabled:!row[action]});if(action==='hidden'&&$('#offer-details').open)$('#offer-details').close();await reloadCatalog();notice(row.hidden?'Oferta restaurada.':'Oferta ocultada. Você pode restaurá-la em Ocultas.');}
     else if(action==='delete-part'){if(!confirm('Excluir esta peça do monitor?'))return;await api('/api/components/'+id,undefined,'DELETE');await reloadCatalog();notice('Peça excluída. O histórico da nuvem foi preservado.');}
     else if(action==='shop-toggle'){await api('/api/shops',{name,enabled:enabled==='true'});await loadSources();}
     else if(action==='source-toggle'||action==='source-delete'){if(action==='source-delete'&&!confirm('Excluir este grupo?'))return;await command(action.replace('-','_'),{id:Number(id),enabled:enabled==='true'});await loadSources();}

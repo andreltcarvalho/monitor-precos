@@ -167,3 +167,8 @@ Consulta as leituras da peça e do período diretamente no Supabase, mantendo RL
 - Cartões com título resumido, menor altura e preços alinhados; título completo nos detalhes.
 - Configuração dos grupos Telegram recolhida com contagem e estado da coleta.
 - Presença do PC expira pelo relógio sem depender de uma resposta nova; controles de sessão seguem o mesmo estado.
+
+### 08/10/2026 — favoritas sem recarregar o catálogo
+- Estrela atualiza imediatamente e bloqueia cliques repetidos enquanto salva.
+- Falhas restauram o estado e consultam a confirmação da nuvem, inclusive em anúncios agrupados.
+- Validação com resposta de API lenta, falha parcial e sessão expirada.

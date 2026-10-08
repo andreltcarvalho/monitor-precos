@@ -29,7 +29,7 @@ async def main():
     repo.data['sources','1']={'id':1,'name':'Grupo teste','reference':'-100123456789','enabled':1}
     repo.data['status','worker']={'name':'PC conectado','checked_at':utcnow(),'sessions':{'Mercado Livre':{'configured':True,'login_open':False,'detail':'Perfil salvo'}}}
     app.dependency_overrides[repository]=lambda:repo
-    errors=[];requests=[]
+    errors=[];requests=[];favorite_gate=asyncio.Event();favorite_gate.set()
     try:
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='https://monitor.test') as client,async_playwright() as p:
             browser=await p.chromium.launch(channel='chrome',headless=True)
@@ -37,6 +37,8 @@ async def main():
             async def route(request):
                 from urllib.parse import urlsplit
                 parsed=urlsplit(request.request.url)
+                if parsed.path.startswith('/api/preferences/'):
+                    await favorite_gate.wait()
                 response=await client.request(request.request.method,parsed.path+('?' +parsed.query if parsed.query else ''),content=request.request.post_data,headers={'Origin':'https://monitor.test','Content-Type':'application/json'})
                 requests.append((request.request.method,parsed.path,response.status_code,response.text[:100] if response.status_code>=400 else ''))
                 await request.fulfill(status=response.status_code,body=response.content,content_type=response.headers.get('content-type','application/json'))
@@ -58,7 +60,15 @@ async def main():
             assert '2.000,00' in await page.locator('#comparison').inner_text()
             await page.keyboard.press('Escape');assert await page.locator('[data-action="open-comparison"]').evaluate('(el)=>el===document.activeElement')
             await page.locator('[data-action="clear-comparison"]').click();assert await page.locator('#comparison-tray').is_hidden()
+            favorite_gate.clear()
+            catalog_reads=sum(path=='/api/catalog' for method,path,status,detail in requests)
             await page.locator('[data-action="favorite"]').first.click()
+            assert await page.locator('[data-action="favorite"]').first.is_disabled()
+            assert await page.locator('[data-action="favorite"]').first.get_attribute('aria-pressed')=='true'
+            assert not any(kind=='preferences' for kind,key in repo.data), 'A estrela deve mudar antes da API responder'
+            favorite_gate.set()
+            await page.wait_for_function('!document.querySelector("[data-action=favorite]").disabled')
+            assert sum(path=='/api/catalog' for method,path,status,detail in requests)==catalog_reads
             try:await page.wait_for_function('document.querySelector("[data-action=favorite]").getAttribute("aria-pressed")==="true"',timeout=5000)
             except Exception:
                 print({'requests':requests,'errors':errors,'notice':await page.locator('#notice').inner_text(),'preferences':[(key,value) for (kind,key),value in repo.data.items() if kind=='preferences']});raise

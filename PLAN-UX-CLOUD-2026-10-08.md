@@ -64,3 +64,8 @@ Reduzir espaços do catálogo preservando alinhamento dos preços, resumo do mod
 
 Rodada 8 publicada em 5bd987b. Endpoint real rejeitou chamada sem segredo (401). Cron Supabase habilitado e execução real salvou 67 cupons de outras lojas; Pelando/Pichau 403 registrados sem cancelar MC. Ativação ML não mudou.
 Rodada 9: JS e Chrome/ASGI aprovados, capturas com dados reais em 1440/1024 sem erro/overflow; Fontes agora cabe em uma tela com os nove grupos recolhidos.
+
+## Rodada 10 — favoritas com retorno imediato
+Estrela muda no clique e bloqueia reenvio enquanto salva todos os anúncios agrupados; sucesso não recarrega o catálogo. Em erro, restaura a indicação e consulta o estado confirmado para resolver falha parcial. Preservar foco e testar resposta lenta, erro/reversão e sessão expirada.
+
+Rodada 10: teste JS de resposta lenta, reenvio, reversão por anúncio agrupado e expiração de sessão aprovado. Chrome/ASGI confirmou estrela imediata com API bloqueada e ausência de recarga do catálogo após salvar.
