@@ -132,3 +132,9 @@
 - Consultas HTTP por peça e cupons públicos na nuvem. Fila persistente para Chrome/Telegram/OLX/aplicação de cupons no PC; agendamento cloud adiado.
 - Conexão local com DPAPI, renovação de sessão e exportação incremental de campos permitidos, sem enviar arquivos/sessões/credenciais. Sincronização preserva leituras cloud mais recentes, estados e histórico.
 - Dependências cloud separadas; arquivos privados excluídos do deploy e Git. 26 regressões novas, 487 testes gerais aprovados, RLS real e interface isolada validados.
+
+### UX — foco das listas e acesso concorrente
+- Cupons em páginas de 12, recentes primeiro; outras lojas não mostram aplicação Mercado Livre nem herdam seu filtro de estado.
+- Atividade separa pendências do histórico paginado; consultas da fila preservam pedidos antigos pendentes além dos últimos 50 finalizados.
+- Renovação de sessão compartilhada entre consultas concorrentes.
+- Região Vercel gru1 confirmada em produção; KaBuM continua retornando leituras, Pichau/Terabyte seguem com HTTP 403.

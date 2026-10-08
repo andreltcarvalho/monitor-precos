@@ -35,3 +35,5 @@ Rodada 2 validada: 50 testes cloud + JS + Chrome/ASGI aprovados; controles de se
 
 ## Rodada 3 — foco e coleta brasileira
 Cupons com paginação e ações pertinentes à loja selecionada; atividade separa pendências do histórico. Testar região única gru1 (São Paulo) e conferir leituras reais antes de atribuir melhora. Sem proxies nem alterações de sessões.
+
+Rodada 3: 51 testes cloud, duas suítes JS e Chrome/ASGI aprovados. Cupons paginados, filtros por loja sem ações impróprias, fila antiga preservada e renovação única de sessão. Capturas reais em 1440/1024 sem erro JS/overflow. /health confirma gru1; a mudança de região não resolveu o 403 de Pichau/Terabyte, KaBuM continua com leituras.

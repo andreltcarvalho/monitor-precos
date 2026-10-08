@@ -75,3 +75,21 @@ assert.doesNotMatch(node('#parts-list').innerHTML,/ · Ignorar/);
 run("state.catalog.scan_next_at={'1':new Date(Date.now()+120000).toISOString()};state.catalog.groups[0].enabled=true;state.catalog.components=[];renderOffers()");
 assert.match(node('#offer-groups').innerHTML,/Atualizar em [12] min/);
 console.log('Cloud UI: catalogue, payment, coupon states, batch guards and history gaps passed.');
+
+// Long lists retain navigation; other shops do not inherit Mercado Livre states/actions.
+run(`state.coupons={coupons:Array.from({length:27},(_,i)=>({code:'CUPOM'+i,shop:'KaBuM',stamp:new Date(2026,9,8,0,i).toISOString()})),applications:[]};state.couponPage=0;`);
+node('#coupon-shop').value='KaBuM';node('#coupon-state').value='active';run('renderCoupons()');
+assert.equal((node('#coupons-list').innerHTML.match(/coupon-row/g)||[]).length,12);
+assert.equal(node('#coupon-batch').hidden,true);
+assert.equal(node('#coupon-tabs').hidden,true);
+assert.match(node('#coupons-list').innerHTML,/CUPOM26/);
+assert.doesNotMatch(node('#coupons-list').innerHTML,/CUPOM0</);
+run('state.couponPage=2;renderCoupons()');
+assert.equal((node('#coupons-list').innerHTML.match(/coupon-row/g)||[]).length,3);
+assert.match(node('#coupon-pagination').innerHTML,/25–27 de 27/);
+run(`state.catalog.commands=[{id:'old',action:'scan',status:'pending',created_at:'2026-10-01T00:00:00Z'},...Array.from({length:25},(_,i)=>({id:String(i),action:'check',status:'done',created_at:'2026-10-08T00:00:00Z'}))];state.activityFilter=null;renderActivity()`);
+assert.equal(run('state.activityFilter'),'pending');assert.match(node('#activity-list').innerHTML,/Aguardando o PC/);
+assert.doesNotMatch(node('#activity-list').innerHTML,/Concluído/);assert.equal(node('#activity-count').textContent,1);
+run("state.activityFilter='history';renderActivity()");assert.equal((node('#activity-list').innerHTML.match(/class="row"/g)||[]).length,10);
+assert.match(node('#activity-pagination').innerHTML,/1–10 de 25/);
+console.log('List focus: coupon pagination, shop scope and outstanding commands passed.');

@@ -44,7 +44,7 @@ async def main():
             await page.goto('https://monitor.test/');await page.locator('.offer-card').first.wait_for()
             assert await page.locator('.offer-card').count()==6
             await page.get_by_role('button',name='Próxima página de Placa').click()
-            assert '7–8 de 8' in await page.locator('.pagination').inner_text()
+            assert '7–8 de 8' in await page.locator('#offer-groups .pagination').inner_text()
             await page.locator('#offer-search').fill('Modelo 0');assert await page.locator('.offer-card').count()==1
             await page.locator('[data-action="details"]').click();assert await page.locator('#offer-details').is_visible()
             await page.keyboard.press('Escape');assert await page.locator('[data-action="details"]').evaluate('(el)=>el===document.activeElement')
@@ -75,6 +75,20 @@ async def main():
             await page.go_back();assert await page.locator('#parts').is_visible()
             await page.locator('#navigation [data-tab="sources"]').click();await page.wait_for_function('document.querySelector("#shops-list").getAttribute("aria-busy")===null')
             session=page.locator('.session-controls[data-shop="Mercado Livre"]');await session.locator('summary').click();await session.locator('[data-action="session-open"]').click();await page.wait_for_function('document.querySelector("[data-action=session-open]").disabled');assert repo.queued[-1]['action']=='session_open'
+            for i in range(30):
+                repo.data['coupon_applications','CODIGO'+str(i)]={'code':'CODIGO'+str(i),'status':'inserted','detail':'Ativado','found_at':utcnow(),'source':'Teste'}
+            await page.locator('#navigation [data-tab="coupons"]').click();await page.wait_for_function('!document.querySelector("#coupons-list").hasAttribute("aria-busy")')
+            await page.locator('#coupon-search').fill('');await page.locator('[data-action="coupon-filter"][data-state="active"]').click()
+            assert await page.locator('.coupon-row').count()==12
+            await page.get_by_role('button',name='Próxima página de cupons').click()
+            assert '13–24 de 31' in await page.locator('#coupon-pagination').inner_text()
+            await page.locator('#coupon-search').fill('CODIGO29');assert await page.locator('.coupon-row').count()==1
+            assert await page.locator('#coupon-pagination').is_hidden()
+            await page.locator('#navigation [data-tab="activity"]').click();await page.wait_for_function('!document.querySelector("#activity-list").hasAttribute("aria-busy")')
+            await page.locator('[data-action="activity-filter"][data-state="pending"]').click()
+            assert 'Aguardando o PC' in await page.locator('#activity-list').inner_text()
+            await page.locator('[data-action="activity-filter"][data-state="history"]').click()
+            assert 'Nenhum pedido finalizado' in await page.locator('#activity-list').inner_text()
             await page.set_viewport_size({'width':1024,'height':900});assert not await page.evaluate('document.documentElement.scrollWidth>innerWidth')
             assert not errors,errors
             await browser.close()

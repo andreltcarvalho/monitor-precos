@@ -1,4 +1,5 @@
 """Data API com JWT do usuário; não usa segredo administrativo."""
+import asyncio
 import os
 
 from fastapi import HTTPException
@@ -71,8 +72,14 @@ class Repository:
         return rows[0]
 
     async def commands(self):
-        return await self.request('GET', 'monitor_commands', params={
-            'owner_id': 'eq.' + self.owner, 'select': '*', 'order': 'created_at.desc', 'limit': 50})
+        pending, history = await asyncio.gather(
+            self.request('GET', 'monitor_commands', params={
+                'owner_id': 'eq.' + self.owner, 'status': 'in.(pending,running)',
+                'select': '*', 'order': 'created_at.asc', 'limit': 500}),
+            self.request('GET', 'monitor_commands', params={
+                'owner_id': 'eq.' + self.owner, 'status': 'in.(done,failed)',
+                'select': '*', 'order': 'created_at.desc', 'limit': 50}))
+        return pending + history
 
 
 async def user_session(client, token):

@@ -369,6 +369,21 @@ class RepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(b'"owner_id":"owner-a"', requests[-1].content)
         self.assertNotIn(b'foreign', requests[-1].content)
 
+    async def test_old_pending_commands_remain_visible_beside_recent_history(self):
+        with patch.dict(os.environ, SUPABASE_URL='https://test.supabase.co', SUPABASE_PUBLISHABLE_KEY='public-test'):
+            repo = Repository(None, 'session', 'owner-a')
+            async def read(method, path, params):
+                self.assertEqual(params['owner_id'], 'eq.owner-a')
+                if params['status'] == 'in.(pending,running)':
+                    self.assertEqual(params['order'], 'created_at.asc')
+                    return [{'id': 'old-pending', 'status': 'pending'}]
+                self.assertEqual(params['limit'], 50)
+                return [{'id': str(i), 'status': 'done'} for i in range(50)]
+            repo.request = AsyncMock(side_effect=read)
+            rows = await repo.commands()
+            self.assertEqual(rows[0]['id'], 'old-pending')
+            self.assertEqual(len(rows), 51)
+
     async def test_no_token_or_anonymous_session_denied(self):
         with self.assertRaises(HTTPException) as error:
             await user_session(None, None)

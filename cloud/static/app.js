@@ -5,18 +5,19 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'
 const currency = value => value == null ? 'Não informado' : (value / 100).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
 const time = stamp => stamp && !Number.isNaN(Date.parse(stamp)) ? new Date(stamp).toLocaleString('pt-BR', {timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : 'Não informado';
 const safeLink = url => { try {const u=new URL(url); return u.protocol==='https:' && !u.username && !u.password ? u.href : ''; } catch {return '';} };
-const state = {tab:'offers', catalog:null, offers:new Map(), comparison:[], busy:new Set(), session:null, coupons:null, pages:new Map(), activeGroup:null,historyRequest:0};
+const state = {tab:'offers', catalog:null, offers:new Map(), comparison:[], busy:new Set(), session:null, coupons:null, pages:new Map(), activeGroup:null,historyRequest:0,couponPage:0,activityPage:0,activityFilter:null};
 const icon = path => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg>`;
 const star = icon('m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z');
 const tabIcons={offers:'M4 6h16v14H4ZM8 6V4h8v2M8 10h8M8 14h5',parts:'M7 7h10v10H7ZM9 3v4m6-4v4M9 17v4m6-4v4M3 9h4m-4 6h4m10-6h4m-4 6h4',coupons:'M4 6h16v4a2 2 0 0 0 0 4v4H4v-4a2 2 0 0 0 0-4ZM13 6v3m0 3v1m0 3v2',history:'M4 4v16h16M7 15l4-4 4 2 5-7',used:'M4 10l8-6 8 6v10H4ZM9 20v-6h6v6',sources:'M12 12V5M5 19v-6h14v6M9 5h6M2 19h6m8 0h6',activity:'M3 12h4l3-7 4 14 3-7h4'};
-let noticeTimer;
+let noticeTimer,refreshPromise;
 function notice(message) { $('#notice-message').textContent=message; $('#notice').hidden=false; clearTimeout(noticeTimer); noticeTimer=setTimeout(()=>$('#notice').hidden=true,9000); }
 function signedOut() {$('#boot').hidden=true; $('#workspace').hidden=true; $('#login').hidden=false; state.session=null;state.catalog=null;state.offers.clear();state.coupons=null; }
 async function api(path, data, method, retried=false) {
   const response=await fetch(path, {method:method || (data===undefined?'GET':'POST'),credentials:'same-origin',headers:data===undefined?{}:{'Content-Type':'application/json'},body:data===undefined?undefined:JSON.stringify(data)});
   if(response.status===401 && !path.startsWith('/api/auth/') && !retried) {
-    const refreshed=await fetch('/api/auth/refresh',{method:'POST',credentials:'same-origin'});
-    if(refreshed.ok) return api(path,data,method,true);
+    if(!refreshPromise)refreshPromise=fetch('/api/auth/refresh',{method:'POST',credentials:'same-origin'}).then(response=>response.ok).finally(()=>refreshPromise=null);
+    const refreshed=await refreshPromise;
+    if(refreshed) return api(path,data,method,true);
     signedOut(); throw new Error('Sessão expirada. Entre novamente.');
   }
   let body;try{body=await response.json();}catch{throw new Error('O servidor não respondeu como esperado. Tente novamente.');}
@@ -163,23 +164,30 @@ function renderCoupons() {
   const focus=document.activeElement?.closest('[data-action]')?.dataset;
   const search=$('#coupon-search').value.toLowerCase().trim(),shop=$('#coupon-shop').value,group=$('#coupon-state').value;
   const open=new Set($$('#coupons-list details[open]').map(detail=>detail.dataset.code));
-  const applications=new Map(state.coupons.applications.map(c=>[c.code,c])),seen=new Set();
-  const coupons=state.coupons.coupons.filter(c=>{const key=(c.shop||'')+':'+(c.code||c.url);if(seen.has(key))return false;seen.add(key);return true;});
+  const applications=new Map(state.coupons.applications.map(c=>[c.code.toUpperCase(),c])),seen=new Set();
+  const coupons=state.coupons.coupons.filter(c=>{const key=(c.shop||'')+':'+(c.code?c.code.toUpperCase():c.url);if(seen.has(key))return false;seen.add(key);return true;});
   const application=c=>c.shop==='Mercado Livre'?applications.get((c.code||'').toUpperCase()):null;
   const couponGroup=c=>application(c)?.group||'new';
   const scoped=coupons.filter(c=>(!shop||c.shop===shop)&&(!search||`${c.code||''} ${c.conditions||''} ${c.shop}`.toLowerCase().includes(search)));
+  const ml=!shop||shop==='Mercado Livre';
+  $('#coupon-tabs').hidden=!ml;$('#coupon-batch').hidden=!ml;
   const states=[['','Todos'],['new','Novos'],['active','Ativados'],['failed','Falhas'],['disabled','Desativados']];
   $('#coupon-tabs').innerHTML=states.map(([key,label])=>`<button class="text" data-action="coupon-filter" data-state="${key}" aria-pressed="${group===key}">${label}<span>${scoped.filter(c=>!key||couponGroup(c)===key).length}</span></button>`).join('');
   const newCount=state.coupons.applications.filter(c=>c.group==='new'&&!c.disabled).length,retryCount=state.coupons.applications.filter(c=>c.retryable&&!c.disabled).length;
   const queue=!!state.catalog?.commands?.some(c=>['coupon_batch','coupon_retry'].includes(c.action)&&['pending','running'].includes(c.status));
   $('#coupon-apply').disabled=!newCount||queue;$('#coupon-retry').disabled=!retryCount||queue;
-  $('#coupon-apply').textContent='Aplicar novos'+(newCount?' ('+newCount+')':'');$('#coupon-retry').textContent='Retentar falhas'+(retryCount?' ('+retryCount+')':'');
+  $('#coupon-apply').textContent='Aplicar novos no ML'+(newCount?' ('+newCount+')':'');$('#coupon-retry').textContent='Retentar falhas'+(retryCount?' ('+retryCount+')':'');
   $('#coupon-activity').hidden=!queue;
   $('#coupon-batch-context').textContent=queue?'Aplicação na fila do PC. Acompanhe o andamento em Atividade.':'Ações em lote só enviam cupons de hoje ao Mercado Livre, pelo PC.';
-  $('#coupons-list').innerHTML=scoped.filter(c=>!group||couponGroup(c)===group).map(c=>{
+  const selected=scoped.filter(c=>!ml||!group||couponGroup(c)===group).sort((a,b)=>(Date.parse(b.stamp)||0)-(Date.parse(a.stamp)||0));
+  state.couponPage=Math.min(state.couponPage,Math.max(0,Math.ceil(selected.length/12)-1));
+  const offset=state.couponPage*12;
+  $('#coupon-pagination').hidden=selected.length<=12;
+  $('#coupon-pagination').innerHTML=`<span>${offset+1}–${Math.min(offset+12,selected.length)} de ${selected.length} cupons</span><div class="actions"><button class="secondary" data-action="coupon-page" data-page="${state.couponPage-1}" ${offset===0?'disabled':''} aria-label="Página anterior de cupons">Anterior</button><button class="secondary" data-action="coupon-page" data-page="${state.couponPage+1}" ${offset+12>=selected.length?'disabled':''} aria-label="Próxima página de cupons">Próxima</button></div>`;
+  $('#coupons-list').innerHTML=selected.slice(offset,offset+12).map(c=>{
     const applied=application(c),status=applied?.group||'new',source=safeLink(c.source_url),link=safeLink(c.url);
     return `<article class="row coupon-row"><div class="copy"><div class="coupon-heading"><h3 class="coupon-code">${escapeHtml(c.code||'Ativação pelo link')}</h3><span class="badge ${status==='active'?'good':status==='failed'?'bad':''}">${escapeHtml(applied?.label||'Encontrado')}</span></div><p class="coupon-origin"><strong>${escapeHtml(c.shop||'Loja não identificada')}</strong> · ${escapeHtml(c.source||'Fonte não informada')} · ${time(c.stamp)}</p>${applied?.failure?`<p class="coupon-failure">${escapeHtml(applied.failure)}${applied.retryable?' · pode retentar':''}</p>`:''}<details class="coupon-conditions" data-code="${escapeHtml(c.code||c.url)}"><summary>Condições${applied?' e resultado':''}</summary><p>${escapeHtml(c.conditions||'Condições não informadas')}</p>${applied?`<p>${escapeHtml(applied.detail||'Ainda não enviado à loja.')}</p><p class="muted">${escapeHtml(applied.guidance)} · ${applied.attempts||0} tentativas</p>`:'<p class="muted">O desconto só é confirmado na loja, conforme as condições.</p>'}<div class="actions">${source?`<a href="${escapeHtml(source)}" target="_blank" rel="noopener noreferrer">Ver publicação</a>`:''}${applied?`<button class="text" data-action="coupon-disable" data-code="${escapeHtml(applied.code)}" data-enabled="${!applied.disabled}">${applied.disabled?'Reativar cupom':'Desativar cupom'}</button>`:''}</div></details></div><div class="row-actions">${c.code?`<button class="secondary" data-action="copy-coupon" data-code="${escapeHtml(c.code)}" aria-label="Copiar código ${escapeHtml(c.code)}">Copiar código</button>`:''}${link?`<a class="text-link" href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer">Abrir na loja</a>`:''}${applied?.retryable?`<button class="secondary" data-action="coupon-retry" data-code="${escapeHtml(applied.code)}">Retentar</button>`:''}</div></article>`;
-  }).join('')||empty(group?'Nenhum cupom nesta seleção':'Nenhum cupom encontrado hoje',search||shop?'Altere a busca ou a loja para ver outros cupons.':'Novos códigos aparecem com as fontes públicas e mensagens do Telegram.');
+  }).join('')||empty(ml&&group?'Nenhum cupom nesta seleção':'Nenhum cupom encontrado hoje',search||shop?'Altere a busca ou a loja para ver outros cupons.':'Novos códigos aparecem com as fontes públicas e mensagens do Telegram.');
   $$('#coupons-list details').forEach(detail=>detail.open=open.has(detail.dataset.code));
   if(focus)$$('#coupons [data-action]').find(button=>button.dataset.action===focus.action&&button.dataset.code===focus.code&&button.dataset.state===focus.state)?.focus();
 }
@@ -213,12 +221,22 @@ async function loadUsed() {
 function renderActivity() {
   const labels={scan:'Buscar ofertas da peça no PC',check:'Conferir oferta',coupon_batch:'Aplicar cupons de hoje',coupon_retry:'Retentar cupons',coupon_disabled:'Alterar cupom',component_delete:'Excluir peça',source_save:'Adicionar grupo',source_toggle:'Alterar grupo',source_delete:'Excluir grupo',olx_save:'Adicionar busca OLX',olx_scan:'Consultar OLX',olx_toggle:'Alterar busca OLX',olx_delete:'Excluir busca OLX',session_open:'Abrir Chrome para login',session_confirm:'Confirmar sessão do Chrome'};
   const statuses={pending:'Aguardando o PC',running:'Recebido pelo PC',done:'Concluído',failed:'Falhou'};
-  const rows=state.catalog?.commands||[];
-  $('#activity-list').innerHTML=rows.map(row=>{
+  const all=state.catalog?.commands||[],pending=all.filter(row=>['pending','running'].includes(row.status));
+  if(state.activityFilter===null)state.activityFilter=pending.length?'pending':'history';
+  const history=all.filter(row=>!['pending','running'].includes(row.status));
+  $('#activity-tabs').innerHTML=[['pending','Pendentes',pending.length],['history','Histórico',history.length]].map(([key,label,count])=>`<button class="text" data-action="activity-filter" data-state="${key}" aria-pressed="${state.activityFilter===key}">${label}<span>${count}</span></button>`).join('');
+  $('#activity-count').textContent=pending.length||'';$('#activity-count').hidden=!pending.length;
+  const rows=state.activityFilter==='pending'?pending.slice().sort((a,b)=>Date.parse(a.created_at)-Date.parse(b.created_at)):history;
+  state.activityPage=Math.min(state.activityPage,Math.max(0,Math.ceil(rows.length/10)-1));
+  const offset=state.activityPage*10;
+  $('#activity-pagination').hidden=rows.length<=10;
+  $('#activity-pagination').innerHTML=`<span>${offset+1}–${Math.min(offset+10,rows.length)} de ${rows.length} pedidos</span><div class="actions"><button class="secondary" data-action="activity-page" data-page="${state.activityPage-1}" ${offset===0?'disabled':''} aria-label="Página anterior de atividade">Anterior</button><button class="secondary" data-action="activity-page" data-page="${state.activityPage+1}" ${offset+10>=rows.length?'disabled':''} aria-label="Próxima página de atividade">Próxima</button></div>`;
+  $('#activity-context').textContent=state.activityFilter==='pending'?'O PC recebe os pedidos ao sincronizar. Você pode cancelar enquanto estiverem na fila.':'Últimos 50 pedidos finalizados. As consultas online ficam em Fontes.';
+  $('#activity-list').innerHTML=rows.slice(offset,offset+10).map(row=>{
     const canceled=row.status==='failed'&&row.detail==='Cancelado pelo usuário.';
     const stale=row.status==='running'&&Date.now()-Date.parse(row.updated_at)>600000;
     return `<div class="row"><div class="copy"><h3>${escapeHtml(labels[row.action]||row.action)}${row.payload?.shop?' · '+escapeHtml(row.payload.shop):''}</h3><p>${escapeHtml(row.detail||'Pedido salvo na fila.')} ${stale?'Sem confirmação recente; confira o monitor local antes de tentar novamente.':''}</p><p class="muted">${time(row.created_at)}</p></div><div class="row-actions"><span class="badge ${canceled?'':row.status==='done'?'good':row.status==='failed'?'bad':'warn'}">${canceled?'Cancelado':stale?'Sem confirmação':statuses[row.status]}</span>${row.status==='pending'&&row.action!=='component_delete'?`<button class="text" data-action="command-cancel" data-id="${escapeHtml(row.id)}">Cancelar pedido</button>`:''}</div></div>`;
-  }).join('')||'<p class="empty">Nenhum pedido enviado ao PC ainda.</p>';
+  }).join('')||empty(state.activityFilter==='pending'?'Nenhum pedido pendente':'Nenhum pedido finalizado',state.activityFilter==='pending'?'As ações enviadas ao PC aparecerão aqui até serem concluídas.':'O resultado dos pedidos ficará neste histórico.');
 }
 function details(row) {
   if(!row)return;
@@ -261,7 +279,7 @@ $('#part-form').addEventListener('submit',async event=>{event.preventDefault();c
 $('#source-form').addEventListener('submit',event=>{event.preventDefault();const form=event.currentTarget;busy(event.submitter,async()=>{await command('source_save',Object.fromEntries(new FormData(form)));form.reset();});});
 $('#used-form').addEventListener('submit',event=>{event.preventDefault();const draft=Object.fromEntries(new FormData(event.currentTarget));draft.mode='fields';draft.url='';busy(event.submitter,()=>command('olx_save',draft));});
 $('#copy-url').addEventListener('click',()=>busy($('#copy-url'),async()=>{await navigator.clipboard.writeText(location.origin);notice('Endereço copiado.');}));
-for(const selector of ['#coupon-search','#coupon-shop','#coupon-state'])$(selector).addEventListener(selector==='#coupon-search'?'input':'change',renderCoupons);
+for(const selector of ['#coupon-search','#coupon-shop','#coupon-state'])$(selector).addEventListener(selector==='#coupon-search'?'input':'change',()=>{state.couponPage=0;renderCoupons();});
 $('#coupon-refresh').addEventListener('click',()=>busy($('#coupon-refresh'),async()=>{const body=await api('/api/coupons/refresh',{});notice(body.status.map(s=>s.detail).join(' · '));await loadCoupons();}));
 $('#coupon-apply').addEventListener('click',async()=>{await busy($('#coupon-apply'),()=>command('coupon_batch',{}));renderCoupons();});
 $('#coupon-retry').addEventListener('click',async()=>{await busy($('#coupon-retry'),()=>command('coupon_retry',{}));renderCoupons();});
@@ -273,7 +291,10 @@ $('#offer-groups').addEventListener('toggle',event=>{if(event.target.matches('de
 $$('#navigation button').forEach(button=>button.insertAdjacentHTML('afterbegin',icon(tabIcons[button.dataset.tab])));
 document.addEventListener('click',async event=>{
   const button=event.target.closest('[data-action]');if(!button)return;const {action,id,code,name,enabled}=button.dataset;
-  if(action==='open-activity'){await showTab('activity');return;}if(action==='open-sources'){await showTab('sources');return;}if(action==='retry-page'){await showTab(state.tab,false);return;}if(action==='coupon-filter'){$('#coupon-state').value=button.dataset.state;renderCoupons();return;}if(action==='piece-history'){$('#history-part').value=id;await showTab('history');return;}
+  if(action==='open-activity'){await showTab('activity');return;}if(action==='open-sources'){await showTab('sources');return;}if(action==='retry-page'){await showTab(state.tab,false);return;}if(action==='coupon-filter'){state.couponPage=0;$('#coupon-state').value=button.dataset.state;renderCoupons();return;}if(action==='piece-history'){$('#history-part').value=id;await showTab('history');return;}
+  if(action==='coupon-page'){state.couponPage=Number(button.dataset.page);renderCoupons();$('#coupon-search').focus({preventScroll:true});$('#coupons-list').scrollIntoView({block:'start'});return;}
+  if(action==='activity-filter'){state.activityFilter=button.dataset.state;state.activityPage=0;renderActivity();$$('#activity-tabs button').find(el=>el.dataset.state===state.activityFilter)?.focus();return;}
+  if(action==='activity-page'){state.activityPage=Number(button.dataset.page);renderActivity();$('#activity-refresh').focus({preventScroll:true});$('#activity-list').scrollIntoView({block:'start'});return;}
   if(action==='edit-part'){editPart(Number(id));return;}if(action==='details'){details(state.offers.get(id));return;}if(action==='clear-comparison'){state.comparison=[];renderOffers();return;}
   if(action==='select-piece'){$('#offer-part').value=id;state.pages.clear();renderOffers();return;}
   if(action==='offer-page'){state.pages.set(Number(id),Number(button.dataset.page));renderOffers();requestAnimationFrame(()=>{$('#piece-'+id)?.focus({preventScroll:true});$('#piece-'+id)?.scrollIntoView({block:'start'});});return;}
