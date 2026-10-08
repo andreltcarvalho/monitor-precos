@@ -187,3 +187,9 @@ Consulta as leituras da peça e do período diretamente no Supabase, mantendo RL
 - Favoritar e ocultar alteram somente o próprio campo em uma gravação atômica.
 - Evita que ações próximas apaguem a preferência anterior e elimina leituras intermediárias da API.
 - RPC restrita à conta autenticada e à oferta existente.
+
+### 08/10/2026 — Usados na OLX
+- Anúncios do menor para o maior preço, seis por página, respeitando cidade, teto e palavras excluídas.
+- Preço anunciado e presença antiga separados; datas, resultado e configuração sob demanda.
+- Pedidos na fila bloqueiam reenvio; cadastro é validado na nuvem antes de chegar ao PC, com erro junto ao formulário.
+- Termos separados por linha viram exclusões independentes; UF escolhida em lista.

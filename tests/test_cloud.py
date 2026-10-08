@@ -135,6 +135,30 @@ class ApiTests(unittest.TestCase):
         self.assertNotIn('label',payload)
         self.assertEqual(search_input(**payload)['name'],'Placa local')
 
+    def test_olx_save_validates_before_queue_and_normalizes_terms(self):
+        valid={'name':'Placa','mode':'fields','query':'rtx 5060','state':'sp','city':'Piracicaba','target':'2800','excluded':'quebrado\ndefeito'}
+        self.assertEqual(self.client.post('/api/commands',json={'action':'olx_save','payload':valid}).status_code,200)
+        self.assertEqual(self.repo.queued[-1]['payload']['state'],'SP')
+        self.assertEqual(self.repo.queued[-1]['payload']['excluded'],'quebrado,defeito')
+        count=len(self.repo.queued)
+        for change in ({'target':'inválido'},{'state':'XX'},{'city':''},{'mode':'inexistente'},{'query':[]},{'extra':'não aceito'}):
+            response=self.client.post('/api/commands',json={'action':'olx_save','payload':dict(valid,**change)})
+            self.assertEqual(response.status_code,422)
+        self.assertEqual(len(self.repo.queued),count)
+
+    def test_used_eligibility_respects_city_limit_exclusions_and_search(self):
+        stamp=utcnow()
+        self.repo.data['olx_searches','1']={'id':1,'name':'Placa local','target':250000,'city':'Piracicaba','excluded':'quebrado','checked_at':stamp,'enabled':1}
+        fixtures=[('good',200000,'Piracicaba, SP','RTX 5060'),('expensive',260000,'Piracicaba, SP','RTX 5060'),('foreign',100000,'São Paulo, SP','RTX 5060'),('excluded',150000,'Piracicaba, SP','RTX 5060 quebrado'),('unknown',None,'Piracicaba, SP','RTX 5060')]
+        for key,price,location,title in fixtures:
+            self.repo.data['olx_listings',key]={'id':key,'search_id':1,'price':price,'location':location,'title':title,'checked_at':stamp}
+        self.repo.data['olx_listings','orphan']={'id':'orphan','search_id':999}
+        with patch('olx.OlxCollector') as browser:
+            result=self.client.get('/api/used').json()
+        browser.assert_not_called()
+        self.assertEqual([row['id'] for row in result['listings'] if row['eligible']],['good'])
+        self.assertEqual(len(result['listings']),5)
+
     def test_component_delete_preserves_name_for_activity_after_removal(self):
         self.assertEqual(self.client.delete('/api/components/1').status_code,200)
         self.assertEqual(self.repo.queued[-1]['payload']['label'],part()['name'])

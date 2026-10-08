@@ -137,7 +137,8 @@ def home():
 
 @app.get('/api/session')
 async def session(repo=Depends(repository)):
-    return {'connected': True, 'cloud_shops': CLOUD_SHOPS, 'local_shops': LOCAL_SHOPS, 'brands': list(BRAND_ALIASES)}
+    from olx import STATES
+    return {'olx_states': STATES, 'connected': True, 'cloud_shops': CLOUD_SHOPS, 'local_shops': LOCAL_SHOPS, 'brands': list(BRAND_ALIASES)}
 
 
 async def values(repo, kind):
@@ -403,7 +404,11 @@ async def scheduled_collect(request: Request, data: dict = Body(...)):
 
 @app.get('/api/used')
 async def used(repo=Depends(repository)):
-    return {'searches': await values(repo, 'olx_searches'), 'listings': await values(repo, 'olx_listings')}
+    from olx import eligible
+    searches, listings = await asyncio.gather(values(repo, 'olx_searches'), values(repo, 'olx_listings'))
+    by_id = {row['id']: {'target': None, 'city': '', 'excluded': '', **row} for row in searches}
+    return {'searches': searches, 'listings': [dict(row, eligible=eligible(by_id[row['search_id']],
+            {'price': None, 'location': '', 'title': '', **row})) for row in listings if row['search_id'] in by_id]}
 
 
 @app.post('/api/commands')
@@ -447,6 +452,19 @@ async def command(data: dict = Body(...), repo=Depends(repository)):
             finally:
                 await collectors.close()
     payload = {key: value for key, value in payload.items() if key != 'label'}
+    if action == 'olx_save':
+        from olx import search_input
+        allowed_fields = {'name', 'mode', 'url', 'query', 'state', 'city', 'target', 'excluded'}
+        if (set(payload)-allowed_fields or not {'name','mode'} <= set(payload)
+                or any(not isinstance(value, str) for value in payload.values())):
+            raise HTTPException(422, 'Revise os campos da busca OLX.')
+        if payload['mode'] == 'fields':
+            payload['state'] = payload.get('state', 'SP').upper()
+        payload['excluded'] = ','.join(term.strip() for term in re.split(r'[,\n]+', payload.get('excluded', '')) if term.strip())
+        try:
+            search_input(**payload)
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from error
     if action == 'check':
         payload['label'] = old.get('title', '')[:120]
     if action in {'source_toggle', 'source_delete', 'olx_toggle', 'olx_delete', 'olx_scan'}:

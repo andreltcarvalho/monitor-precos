@@ -28,6 +28,11 @@ async def main():
     repo.data['settings','public_coupons']={'value':json.dumps([{'code':'NOVOCODIGO','shop':'Mercado Livre','source':'Pelando','conditions':'Informática','activation':False,'found_at':utcnow(),'checked_at':utcnow(),'url':'https://www.mercadolivre.com.br/cupons','source_url':'https://www.pelando.com.br/cupons-de-descontos/mercado-livre'}])}
     repo.data['sources','1']={'id':1,'name':'Grupo teste','reference':'-100123456789','enabled':1}
     repo.data['status','worker']={'name':'PC conectado','checked_at':utcnow(),'sessions':{'Mercado Livre':{'configured':True,'login_open':False,'detail':'Perfil salvo'}}}
+    stamp=utcnow()
+    repo.data['olx_searches','1']={'id':1,'name':'Teste OLX — dados sintéticos','query':'rtx 5060','city':'Piracicaba','state':'SP','target':300000,'excluded':'quebrado','enabled':1,'checked_at':stamp,'status':'8 anúncios lidos'}
+    for i in range(8):
+        repo.data['olx_listings',str(i)]={'id':i,'search_id':1,'price':200000+i*1000,'title':'Placa local modelo '+str(i),'location':'Piracicaba, SP','checked_at':stamp if i else '2000-01-01T00:00:00Z','published_text':'Hoje, 12:30','url':'https://www.olx.com.br/anuncio-'+str(i)}
+    repo.data['olx_listings','foreign']={'id':99,'search_id':1,'price':10000,'title':'Outra cidade','location':'São Paulo, SP','checked_at':stamp}
     app.dependency_overrides[repository]=lambda:repo
     errors=[];requests=[];favorite_gate=asyncio.Event();favorite_gate.set();history_gate=asyncio.Event();history_gate.set()
     try:
@@ -134,6 +139,38 @@ async def main():
             assert '13–24 de 31' in await page.locator('#coupon-pagination').inner_text()
             await page.locator('#coupon-search').fill('CODIGO29');assert await page.locator('.coupon-row').count()==1
             assert await page.locator('#coupon-pagination').is_hidden()
+            await page.locator('#navigation [data-tab="used"]').click()
+            await page.wait_for_function('!document.querySelector("#used-list").hasAttribute("aria-busy")')
+            await page.locator('#used>details>summary').click()
+            form=page.locator('#used-form')
+            await form.locator('[name="name"]').fill('Nova busca')
+            await form.locator('[name="query"]').fill('rtx 5060')
+            await form.locator('[name="target"]').fill('inválido')
+            count=len(repo.queued)
+            await form.locator('button[type="submit"]').click()
+            await page.wait_for_function('document.querySelector("#used-error").innerText.length>0')
+            assert len(repo.queued)==count
+            assert await form.locator('[name="target"]').input_value()=='inválido'
+            await form.locator('[name="target"]').fill('2800')
+            await form.locator('[name="excluded"]').fill('quebrado\ndefeito')
+            await form.locator('button[type="submit"]').click()
+            await page.wait_for_function('!document.querySelector("#used-form").closest("details").open')
+            assert repo.queued[-1]['action']=='olx_save'
+            assert repo.queued[-1]['payload']['excluded']=='quebrado,defeito'
+            assert await form.locator('[name="state"]').input_value()=='SP'
+            if await page.locator('#notice').is_visible():await page.locator('#dismiss-notice').click()
+            assert await page.locator('#used-list .offer-card').count()==6
+            assert 'Outra cidade' not in await page.locator('#used-list').inner_text()
+            assert 'Presença e preço atuais não confirmados' in await page.locator('#used-list').inner_text()
+            out=Path('tmp/ux-2026-10-08');out.mkdir(parents=True,exist_ok=True)
+            await page.screenshot(path=out/'synthetic-used.png',full_page=True)
+            await page.locator('[data-action="used-page"]').last.click()
+            assert await page.locator('#used-list .offer-card').count()==2
+            assert await page.locator('#used-search-1').evaluate('(el)=>el===document.activeElement')
+            await page.locator('[data-action="olx-scan"]').click()
+            await page.wait_for_function('document.querySelector("[data-action=olx-scan]").innerText.includes("Pedido enviado")')
+            assert 'Pedido enviado' in await page.locator('[data-action="olx-scan"]').inner_text()
+            assert repo.queued[-1]['action']=='olx_scan'
             await page.locator('#navigation [data-tab="activity"]').click();await page.wait_for_function('!document.querySelector("#activity-list").hasAttribute("aria-busy")')
             await page.locator('[data-action="activity-filter"][data-state="pending"]').click()
             assert 'Aguardando o PC' in await page.locator('#activity-list').inner_text()

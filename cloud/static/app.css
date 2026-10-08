@@ -69,3 +69,7 @@ dialog{color:var(--foreground);background:var(--surface);border:0;border-radius:
 @media(max-width:760px){.comparison-tray{left:16px;right:16px;flex-wrap:wrap}}
 
 .telegram-section{margin:12px 0 0;padding:18px 20px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}.telegram-section>summary{display:flex;align-items:center;gap:12px}.telegram-section>summary::before{content:"▸";font-size:12px;color:var(--muted)}.telegram-section[open]>summary::before{content:"▾"}.telegram-section>summary span{font-size:12px;font-weight:400;color:var(--muted)}.telegram-section .rows{padding:0;border:0;border-radius:0}.telegram-section>p{margin-top:12px;font-size:13px;color:var(--muted)}
+
+.used-note{font-size:13px;max-width:90ch;margin:18px 0}.used-configuration{margin:-6px 0 18px}.used-configuration summary,.used-reading summary{font-size:12px;font-weight:400;color:var(--muted)}.used-configuration p,.used-reading p{font-size:13px;margin:8px 0}.used-card .offer-model{min-height:76px}.used-card .price-block{min-height:55px}.used-card .offer-open{flex:none;margin-top:auto}.used-reading{margin-bottom:6px}
+
+#used-error{color:var(--negative);font-size:13px;margin-top:12px}

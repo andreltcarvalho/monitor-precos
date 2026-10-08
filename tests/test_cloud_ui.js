@@ -124,3 +124,16 @@ assert.equal(run("commandContext({action:'scan',payload:{component_id:999}})"),'
 run(`state.catalog.commands=[{action:'source_toggle',payload:{id:1,label:'<img src=x onerror=alert(1)>'},status:'pending',created_at:new Date().toISOString()}];state.activityFilter='pending';renderActivity();`);
 assert.match(node('#activity-list').innerHTML,/&lt;img/);assert.doesNotMatch(node('#activity-list').innerHTML,/<img/);
 console.log('Activity: named requests, old-request fallback and escaping passed.');
+
+run(`state.catalog.commands=[];state.used={searches:[{id:1,name:'Teste OLX',city:'Piracicaba',state:'SP',enabled:1,target:300000,checked_at:new Date().toISOString()}],listings:[]};
+for(let i=0;i<8;i++)state.used.listings.push({id:i,search_id:1,price:200000+(7-i)*1000,title:'Anúncio '+i,location:'Piracicaba, SP',checked_at:'2000-01-01T00:00:00Z',eligible:true,url:'https://www.olx.com.br/anuncio'});
+state.used.listings.push({id:99,search_id:1,price:1,title:'Fora dos critérios',eligible:false});renderUsed();`);
+assert.equal((node('#used-list').innerHTML.match(/class="offer-card/g)||[]).length,6);
+assert.match(node('#used-list').innerHTML,/1–6 de 8/);
+assert.doesNotMatch(node('#used-list').innerHTML,/Fora dos critérios/);
+assert.match(node('#used-list').innerHTML,/Presença e preço atuais não confirmados/);
+assert.equal(run('usedRows(state.used.searches[0])[0].id'),7);
+run('state.usedPages.set(1,1);renderUsed();');assert.match(node('#used-list').innerHTML,/7–8 de 8/);
+run(`state.catalog.commands=[{action:'olx_scan',status:'pending',payload:{id:1}}];renderUsed();`);
+assert.match(node('#used-list').innerHTML,/disabled>Pedido enviado/);
+console.log('Used listings: eligibility, price order, pagination, stale data and queued requests passed.');

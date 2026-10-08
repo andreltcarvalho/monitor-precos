@@ -86,3 +86,8 @@ Favoritar/ocultar usa uma gravação atômica de um único campo no Supabase; ON
 Rodada 13: migração aplicada pelo plugin. SQL real validou preservação de campos, alterações isoladas entre duas contas, oferta ausente e rejeição de campo arbitrário; fixtures revertidas. 64 testes cloud, favoritos/histórico JS e Chrome/ASGI aprovados.
 
 Correção de contrato: source_save/olx_save usam o nome já presente no payload; não acrescentar label a olx_save, que passa kwargs ao parser local. Teste executa o parser real com o payload que a API enfileira.
+
+## Rodada 14 — Usados com critérios e presença honestos
+Reutilizar a regra OLX de elegibilidade sem instanciar coletor/navegador; API marca elegibilidade e ignora registros sem busca correspondente. Cartões ordenados por preço, seis por página; separar preço anunciado de presença confirmada, datas/configuração sob demanda e bloquear pedido repetido na fila. Validar API com cidade/teto/exclusões, UI com dados sintéticos identificados e estado vazio real.
+
+Rodada 14: 67 testes cloud aprovados. UI JS protege elegibilidade/preço/paginação/antiguidade/fila. Chrome/ASGI validou seis cartões, foco na troca de página, consulta sem reenvio e formulário inválido que preserva os campos; cadastro correto normaliza exclusões por linha. Captura OLX usa fixtures explicitamente sintéticas; produção ainda sem buscas sincronizadas, sem alegar coleta real.
