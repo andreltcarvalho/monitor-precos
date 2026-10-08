@@ -34,7 +34,7 @@ async def main():
         repo.data['olx_listings',str(i)]={'id':i,'search_id':1,'price':200000+i*1000,'title':'Placa local modelo '+str(i),'location':'Piracicaba, SP','checked_at':stamp if i else '2000-01-01T00:00:00Z','published_text':'Hoje, 12:30','url':'https://www.olx.com.br/anuncio-'+str(i)}
     repo.data['olx_listings','foreign']={'id':99,'search_id':1,'price':10000,'title':'Outra cidade','location':'São Paulo, SP','checked_at':stamp}
     app.dependency_overrides[repository]=lambda:repo
-    errors=[];requests=[];favorite_gate=asyncio.Event();favorite_gate.set();history_gate=asyncio.Event();history_gate.set()
+    errors=[];requests=[];favorite_gate=asyncio.Event();favorite_gate.set();history_gate=asyncio.Event();history_gate.set();source_gate=asyncio.Event();source_gate.set()
     try:
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='https://monitor.test') as client,async_playwright() as p:
             browser=await p.chromium.launch(channel='chrome',headless=True)
@@ -42,6 +42,8 @@ async def main():
             async def route(request):
                 from urllib.parse import urlsplit
                 parsed=urlsplit(request.request.url)
+                if parsed.path=='/api/sources':
+                    await source_gate.wait()
                 if parsed.path.startswith('/api/history/'):
                     await history_gate.wait()
                 if parsed.path.startswith('/api/preferences/'):
@@ -142,7 +144,14 @@ async def main():
             await page.wait_for_function('!document.querySelector("#source-form").closest("details").open')
             assert repo.queued[-1]['action']=='source_save'
             assert repo.queued[-1]['payload']['reference']=='@grupotestexyz'
-            session=page.locator('.session-controls[data-shop="Mercado Livre"]');await session.locator('summary').click();await session.locator('[data-action="session-open"]').click();await page.wait_for_function('document.querySelector("[data-action=session-open]").disabled');assert repo.queued[-1]['action']=='session_open'
+            session=page.locator('.session-controls[data-shop="Mercado Livre"]')
+            source_gate.clear();await page.evaluate('void(window.sourceRefresh=loadSources())')
+            await session.locator('summary').click();await session.locator('[data-action="session-confirm"]').focus()
+            source_gate.set();await page.evaluate('window.sourceRefresh')
+            assert await session.get_attribute('open') is not None
+            assert await session.locator('[data-action="session-confirm"]').evaluate('(el)=>el===document.activeElement')
+            await page.evaluate('refreshBackground()');assert await session.get_attribute('open') is not None
+            session=page.locator('.session-controls[data-shop="Mercado Livre"]');await session.locator('[data-action="session-open"]').click();await page.wait_for_function('document.querySelector("[data-action=session-open]").disabled');assert repo.queued[-1]['action']=='session_open'
             for i in range(30):
                 repo.data['coupon_applications','CODIGO'+str(i)]={'code':'CODIGO'+str(i),'status':'inserted','detail':'Ativado','found_at':utcnow(),'source':'Teste'}
             await page.locator('#navigation [data-tab="coupons"]').click();await page.wait_for_function('!document.querySelector("#coupons-list").hasAttribute("aria-busy")')
@@ -154,6 +163,11 @@ async def main():
             assert await page.locator('#coupon-pagination').is_hidden()
             await page.locator('#navigation [data-tab="used"]').click()
             await page.wait_for_function('!document.querySelector("#used-list").hasAttribute("aria-busy")')
+            await page.locator('.used-reading summary').first.click()
+            await page.locator('.used-reading summary').first.focus()
+            await page.evaluate('loadUsed()')
+            assert await page.locator('.used-reading').first.get_attribute('open') is not None
+            assert await page.locator('.used-reading summary').first.evaluate('(el)=>el===document.activeElement')
             await page.locator('#used>details>summary').click()
             form=page.locator('#used-form')
             await form.locator('[name="name"]').fill('Nova busca')

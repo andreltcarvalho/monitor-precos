@@ -5,13 +5,13 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'
 const currency = value => value == null ? 'Não informado' : (value / 100).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
 const time = stamp => stamp && !Number.isNaN(Date.parse(stamp)) ? new Date(stamp).toLocaleString('pt-BR', {timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : 'Não informado';
 const safeLink = url => { try {const u=new URL(url); return u.protocol==='https:' && !u.username && !u.password ? u.href : ''; } catch {return '';} };
-const state = {tab:'offers', catalog:null, offers:new Map(), comparison:[], busy:new Set(), session:null, coupons:null, pages:new Map(), activeGroup:null,historyRequest:0,couponPage:0,activityPage:0,activityFilter:null,pendingFavorites:new Set(),used:null,usedPages:new Map(),catalogExpiry:Infinity,detailId:null};
+const state = {tab:'offers', catalog:null, offers:new Map(), comparison:[], busy:new Set(), session:null, coupons:null, pages:new Map(), activeGroup:null,historyRequest:0,couponPage:0,activityPage:0,activityFilter:null,pendingFavorites:new Set(),used:null,usedPages:new Map(),catalogExpiry:Infinity,detailId:null,sourcesRequest:0,usedRequest:0,polling:false};
 const icon = path => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg>`;
 const star = icon('m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z');
 const tabIcons={offers:'M4 6h16v14H4ZM8 6V4h8v2M8 10h8M8 14h5',parts:'M7 7h10v10H7ZM9 3v4m6-4v4M9 17v4m6-4v4M3 9h4m-4 6h4m10-6h4m-4 6h4',coupons:'M4 6h16v4a2 2 0 0 0 0 4v4H4v-4a2 2 0 0 0 0-4ZM13 6v3m0 3v1m0 3v2',history:'M4 4v16h16M7 15l4-4 4 2 5-7',used:'M4 10l8-6 8 6v10H4ZM9 20v-6h6v6',sources:'M12 12V5M5 19v-6h14v6M9 5h6M2 19h6m8 0h6',activity:'M3 12h4l3-7 4 14 3-7h4'};
 let noticeTimer,refreshPromise;
 function notice(message) { $('#notice-message').textContent=message; $('#notice').hidden=false; clearTimeout(noticeTimer); noticeTimer=setTimeout(()=>$('#notice').hidden=true,9000); }
-function signedOut() {$$('dialog[open]').forEach(dialog=>dialog.close());$('#boot').hidden=true; $('#workspace').hidden=true; $('#login').hidden=false; state.session=null;state.catalog=null;state.offers.clear();state.coupons=null; }
+function signedOut() {$$('dialog[open]').forEach(dialog=>dialog.close());$('#boot').hidden=true; $('#workspace').hidden=true; $('#login').hidden=false; state.session=null;state.catalog=null;state.offers.clear();state.coupons=null;state.used=null;state.comparison=[];state.historyRequest++;state.sourcesRequest++;state.usedRequest++; }
 async function apiFetch(path, options, timeout=30000) {
   try {return await fetch(path,{...options,signal:AbortSignal.timeout(timeout)});}
   catch(error) {
@@ -234,11 +234,24 @@ function editPart(id) {
   $$('#brands input').forEach(input=>input.checked=brands.includes(input.value));$('#brand-search').value='';brandChoices();partErrors();$('#capacity-field').hidden=part.kind!=='ssd';$('#part-form-title').textContent='Editar '+part.name;$('#part-save').textContent='Salvar alterações';$('#part-cancel').hidden=false;form.scrollIntoView({block:'start'});form.elements.name.focus();
 }
 async function command(action,payload) {const result=await api('/api/commands',{action,payload});notice(result.detail||'Pedido na fila do PC. Você pode acompanhar em Atividade.');await reloadCatalog();return result;}
+function preserveListFocus(selector) {
+  const root=$(selector),active=document.activeElement;
+  if(!root.contains(active)||!active.matches('summary,[data-action]'))return ()=>{};
+  const summary=active?.matches('summary'),data={...(summary?active.parentElement:active)?.dataset};
+  return ()=>{
+    const candidates=summary?$$(selector+' details'):$$(selector+' [data-action]');
+    const match=candidates.find(node=>Object.keys(data).every(key=>node.dataset[key]===data[key]));
+    (summary?match?.querySelector('summary'):match)?.focus({preventScroll:true});
+  };
+}
 async function loadSources() {
+  const request=++state.sourcesRequest;let body;
+  try{body=await api('/api/sources');}catch(error){if(request===state.sourcesRequest&&state.session)throw error;return;}
+  if(request!==state.sourcesRequest||!state.session)return;
+  const restoreShops=preserveListFocus('#shops-list'),restoreGroups=preserveListFocus('#telegram-list');
   const open=new Set($$('#shops-list details[open]').map(detail=>(detail.dataset.section||'result')+':'+detail.dataset.shop));
   const sourceOpen=new Set($$('#telegram-list details[open]').map(detail=>detail.dataset.id));
-  const body=await api('/api/sources');
-  const connected=body.worker&&Date.now()-Date.parse(body.worker.checked_at)<180000;
+  const connected=workerConnected();
   const shopRows=local=>body.shops.filter(shop=>shop.local===local).map(shop=>{
     const statuses=body.status.filter(row=>row.name===shop.name&&row.checked_at&&(!row.component_id||state.catalog.components.some(p=>p.id===row.component_id&&p.enabled))).sort((a,b)=>Date.parse(b.checked_at)-Date.parse(a.checked_at));
     const profile=body.worker?.sessions?.[shop.name],pending=state.catalog.commands?.some(row=>['pending','running'].includes(row.status)&&['session_open','session_confirm'].includes(row.action)&&row.payload?.shop===shop.name);
@@ -253,6 +266,7 @@ async function loadSources() {
     const pending=state.catalog.commands?.some(row=>['pending','running'].includes(row.status)&&['source_toggle','source_delete'].includes(row.action)&&Number(row.payload?.id)===source.id);
     return `<div class="row"><div class="copy"><h3>${escapeHtml(source.name)}</h3><p class="muted">${pending?'Alteração na fila do PC':source.enabled?(workerConnected()?'Acompanhando novas mensagens':'Aguardando monitor no PC'):'Grupo pausado'}</p><details class="source-configuration" data-id="${source.id}" ${sourceOpen.has(String(source.id))?'open':''}><summary>Configuração do grupo</summary><p>Referência: <code>${escapeHtml(source.reference)}</code></p><button class="text danger" data-action="source-delete" data-id="${source.id}" ${pending?'disabled':''}>Excluir grupo</button></details></div><button class="secondary" data-action="source-toggle" data-id="${source.id}" data-enabled="${!source.enabled}" ${pending?'disabled':''} aria-label="${source.enabled?'Pausar':'Ativar'} ${escapeHtml(source.name)}">${source.enabled?'Pausar':'Ativar'}</button></div>`;
   }).join('')||empty('Nenhum grupo sincronizado','Conecte o monitor do PC para acompanhar mensagens novas do Telegram.');
+  restoreShops();restoreGroups();
 }
 
 async function loadCoupons() {const first=!state.coupons;state.coupons=await api('/api/coupons');const shops=[...new Set(state.coupons.coupons.map(c=>c.shop))].sort();options($('#coupon-shop'),shops,'Todas');if(first&&shops.includes('Mercado Livre'))$('#coupon-shop').value='Mercado Livre';renderCoupons();}
@@ -326,13 +340,15 @@ function historyView(result) {
   return `<div class="history-surface"><div class="history-summary"><div><span>Menor preço em 30 dias</span><strong>${currency(result.minimum)}</strong></div><div><span>Mediana dos mínimos diários</span><strong>${currency(result.median)}</strong></div><p>${points.length} ${points.length===1?'dia com leitura':'dias com leitura'}</p></div><svg class="history-chart" viewBox="0 0 900 245" role="img" aria-label="${escapeHtml(points.map(p=>date(p.date)+': '+currency(p.price)).join('; '))}"><line x1="90" y1="185" x2="840" y2="185" stroke="var(--line)"/><line x1="90" y1="60" x2="840" y2="60" stroke="var(--line)" stroke-dasharray="3 5"/><text x="8" y="189" fill="var(--muted)" font-size="12">${currency(min)}</text><text x="8" y="64" fill="var(--muted)" font-size="12">${currency(min+spread)}</text>${lines}${dots}<text x="${points.length===1?465:90}" y="220" fill="var(--muted)" font-size="12">${date(points[0].date)}</text>${points.length>1?`<text x="840" y="220" text-anchor="end" fill="var(--muted)" font-size="12">${date(points.at(-1).date)}</text>`:''}</svg><p class="muted history-note">Cada ponto é o menor valor confirmado naquele dia. Dias sem leitura ficam sem linha; frete não incluído.</p></div><details class="disclosure history-records"><summary>Ver os valores por dia</summary><div class="table-scroll"><table><thead><tr><th>Dia</th><th>Menor preço confirmado</th></tr></thead><tbody>${points.map(p=>`<tr><td>${date(p.date)}</td><td>${currency(p.price)}</td></tr>`).join('')}</tbody></table></div></details>${result.truncated?'<p class="muted">Histórico parcial: limite de leituras atingido nesta consulta.</p>':''}`;
 }
 
-async function loadUsed() {state.used=await api('/api/used');renderUsed();}
+async function loadUsed() {const request=++state.usedRequest;let body;try{body=await api('/api/used');}catch(error){if(request===state.usedRequest&&state.session)throw error;return;}if(request!==state.usedRequest||!state.session)return;state.used=body;renderUsed();}
 function usedRows(search) {
   return state.used.listings.filter(row=>row.search_id===search.id&&row.eligible!==false)
     .sort((a,b)=>(a.price??Infinity)-(b.price??Infinity)||Date.parse(b.checked_at)-Date.parse(a.checked_at));
 }
 function renderUsed() {
   if(!state.used)return;
+  const restore=preserveListFocus('#used-list');
+  const readingOpen=new Set($$('#used-list .used-reading[open]').map(detail=>detail.dataset.listing));
   const open=new Set($$('#used-list details[open]').map(detail=>detail.dataset.search));
   $('#used-list').innerHTML=state.used.searches.map(search=>{
     const rows=usedRows(search),pending=state.catalog.commands?.find(row=>['pending','running'].includes(row.status)&&row.action.startsWith('olx_')&&Number(row.payload?.id)===search.id);
@@ -342,9 +358,10 @@ function renderUsed() {
     const limit=search.target!=null?' · Até '+currency(search.target):'';
     return `<section class="group used-group"><div class="group-heading"><div><h3 id="used-search-${search.id}" tabindex="-1">${escapeHtml(search.name)} <span class="badge ${pending||failed?'warn':''}">${label}</span></h3><p>${escapeHtml(search.city||'Localização da busca')} / ${escapeHtml(search.state||'')} ${escapeHtml(limit)}</p></div><button class="secondary" data-action="olx-scan" data-id="${search.id}" ${!search.enabled||pending?'disabled':''}>${pending?'Pedido enviado':'Consultar no PC'}</button></div><details class="used-configuration" data-search="${search.id}" ${open.has(String(search.id))?'open':''}><summary>Resultado e configuração da busca</summary><p>${escapeHtml(search.status||'Aguardando consulta')} · ${time(search.checked_at)}</p><p class="muted">Busca: ${escapeHtml(search.query||'Pelo link cadastrado')}${search.excluded?' · Exclui: '+escapeHtml(search.excluded):''}</p><div class="actions"><button class="text" data-action="olx-toggle" data-id="${search.id}" data-enabled="${!search.enabled}" ${pending?'disabled':''}>${search.enabled?'Pausar busca':'Ativar busca'}</button><button class="text danger" data-action="olx-delete" data-id="${search.id}" ${pending?'disabled':''}>Excluir busca</button></div></details><div class="offer-grid">${rows.slice(page*6,page*6+6).map(row=>{
       const elapsed=Date.now()-Date.parse(row.checked_at),stale=!search.enabled||!Number.isFinite(elapsed)||elapsed<-60000||elapsed>1800000||row.checked_at!==search.checked_at;
-      return `<article class="offer-card used-card" aria-label="${escapeHtml(row.title)}"><div class="offer-model"><h4 class="offer-title" title="${escapeHtml(row.title)}">${escapeHtml(row.title)}</h4><p class="offer-specs">${escapeHtml(row.location||'Localização não informada')}</p></div><div class="price-block"><div class="offer-price">${currency(row.price)}</div><p class="price-condition">Preço anunciado</p></div><p class="offer-freshness ${stale?'stale':''}">${stale?'Presença e preço atuais não confirmados':'Lido '+age(row.checked_at)}</p><details class="used-reading"><summary>Datas do anúncio</summary><p>Na OLX: ${escapeHtml(row.published_text||'Data não informada')}</p><p>Lido em ${time(row.checked_at)}</p></details>${safeLink(row.url)?`<a class="offer-open" href="${escapeHtml(safeLink(row.url))}" target="_blank" rel="noopener noreferrer">Ver anúncio ${icon('M7 17 17 7M7 7h10v10')}</a>`:''}</article>`;
+      return `<article class="offer-card used-card" aria-label="${escapeHtml(row.title)}"><div class="offer-model"><h4 class="offer-title" title="${escapeHtml(row.title)}">${escapeHtml(row.title)}</h4><p class="offer-specs">${escapeHtml(row.location||'Localização não informada')}</p></div><div class="price-block"><div class="offer-price">${currency(row.price)}</div><p class="price-condition">Preço anunciado</p></div><p class="offer-freshness ${stale?'stale':''}">${stale?'Presença e preço atuais não confirmados':'Lido '+age(row.checked_at)}</p><details class="used-reading" data-listing="${escapeHtml(row.id)}" ${readingOpen.has(String(row.id))?'open':''}><summary>Datas do anúncio</summary><p>Na OLX: ${escapeHtml(row.published_text||'Data não informada')}</p><p>Lido em ${time(row.checked_at)}</p></details>${safeLink(row.url)?`<a class="offer-open" href="${escapeHtml(safeLink(row.url))}" target="_blank" rel="noopener noreferrer">Ver anúncio ${icon('M7 17 17 7M7 7h10v10')}</a>`:''}</article>`;
     }).join('')}</div>${rows.length?`<div class="pagination"><span>${page*6+1}–${Math.min(page*6+6,rows.length)} de ${rows.length} anúncios dentro dos critérios · menor preço primeiro</span>${rows.length>6?`<div class="actions"><button class="secondary" data-action="used-page" data-id="${search.id}" data-page="${page-1}" ${page===0?'disabled':''}>Anterior</button><button class="secondary" data-action="used-page" data-id="${search.id}" data-page="${page+1}" ${page*6+6>=rows.length?'disabled':''}>Próxima</button></div>`:''}</div>`:empty('Nenhum anúncio dentro dos critérios','O resultado da última consulta fica acima. A busca no PC preserva as leituras anteriores quando há bloqueio.')}</section>`;
   }).join('')||empty('Adicione sua primeira busca local','Informe produto e cidade acima. As buscas existentes aparecem quando o PC sincroniza.');
+  restore();
 }
 
 function commandContext(row) {
@@ -406,6 +423,14 @@ async function showTab(name,updateUrl=true) {
   try {if(name==='sources')await loadSources();if(name==='coupons')await loadCoupons();if(name==='history')await loadHistory();if(name==='used')await loadUsed();if(name==='activity'||name==='offers'&&!state.catalog)await reloadCatalog();}
   catch(error){if(id)loadError(id,error);else notice(error.message);}
   finally {if(id&&(id!=='history-result'||$('#history-loading').hidden))$('#'+id).removeAttribute('aria-busy');}
+}
+
+async function refreshBackground() {
+  if(state.polling||!state.session||document.visibilityState!=='visible'||!['offers','activity','sources','coupons','used'].includes(state.tab)||$('dialog[open]')||$('form:focus-within')||$('[aria-busy=true]'))return;
+  const tab=state.tab;state.polling=true;
+  try {await reloadCatalog();if(!state.session||state.tab!==tab)return;if(tab==='coupons')await loadCoupons();if(tab==='sources')await loadSources();if(tab==='used')await loadUsed();}
+  catch(error){if(state.session)notice(error.message);}
+  finally {state.polling=false;}
 }
 
 $('#navigation').addEventListener('click',event=>{const button=event.target.closest('button');if(button)showTab(button.dataset.tab);});
@@ -470,5 +495,5 @@ document.addEventListener('click',async event=>{
   });
 });
 setInterval(()=>{refreshTimedPrices();for(const button of $$('[data-action=scan]')){const id=Number(button.dataset.id),remaining=Date.parse(button.dataset.nextAt)-Date.now();button.disabled=state.busy.has(id)||button.dataset.enabled!=='true'||remaining>0;button.textContent=state.busy.has(id)?'Buscando nas lojas…':remaining>0?'Atualizar em '+Math.ceil(remaining/60000)+' min':'Atualizar esta peça';}},15000);
-setInterval(async()=>{if(state.session&&document.visibilityState==='visible'&&['offers','activity','sources','coupons','used'].includes(state.tab)){try{await reloadCatalog();if(state.tab==='coupons')await loadCoupons();if(state.tab==='sources')await loadSources();if(state.tab==='used')await loadUsed();}catch(error){notice(error.message);}}},60000);
+setInterval(refreshBackground,60000);
 start();

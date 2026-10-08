@@ -203,3 +203,7 @@ Consulta as leituras da peça e do período diretamente no Supabase, mantendo RL
 - Normalização de referência compartilhada entre API e cadastro local.
 - Formato e duplicação são verificados antes do pedido ao PC, inclusive grupos ainda na fila.
 - Erro preserva o rascunho; cadastro correto fecha o formulário e segue para Atividade.
+
+### Atualizações que preservam a interação
+- Fontes e OLX mantêm os detalhes abertos e o foco; respostas antigas não substituem consultas recentes.
+- A atualização automática aguarda formulários, diálogos e operações em andamento e não cria consultas concorrentes.

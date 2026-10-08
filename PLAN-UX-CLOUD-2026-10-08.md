@@ -101,3 +101,8 @@ Rodada 15: quatro testes JS e Chrome/ASGI aprovados. Teste de relógio protege c
 Compartilhar a normalização já usada pelo cadastro local, sem banco ou acesso ao Telegram na nuvem. API valida formato e duplicação (inclusive pedido pendente); formulário preserva rascunho e explica erro junto aos campos. Confirmação da conta/participação continua local e não há entrada automática em grupos.
 
 Rodada 16: 68 testes cloud e 50 testes core aprovados; JS e Chrome/ASGI confirmaram erro no formulário sem perder rascunho, normalização e bloqueio de duplicação pendente.
+
+## Rodada 17 — atualização sem interromper a interação
+Preservar foco e detalhes nas listas de Fontes/OLX; ler disclosures após a resposta, não antes. Ignorar respostas antigas de Fontes/OLX. Atualização automática não sobrepõe edição, diálogo, operação ativa ou outra atualização; segue a aba que iniciou a consulta. Validar concorrência, rascunho, foco e disclosures no Chrome.
+
+Rodada 17: teste JS de respostas fora de ordem e atualização concorrente aprovado; Chrome/ASGI abriu uma sessão durante resposta lenta e preservou disclosure/foco, além das datas abertas de anúncio OLX. Atualização automática pausa durante formulário, diálogo ou operação ativa.

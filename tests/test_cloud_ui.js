@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const nodes = new Map();
 const node = selector => {
   if (selector === '#comparison details') return null;
-  if (!nodes.has(selector)) nodes.set(selector, {value:'', innerHTML:'', textContent:'', hidden:false, setAttribute(){},removeAttribute(){},classList:{toggle(){}}});
+  if (!nodes.has(selector)) nodes.set(selector, {value:'', innerHTML:'', textContent:'', hidden:false, contains(){return false;},setAttribute(){},removeAttribute(){},classList:{toggle(){}}});
   return nodes.get(selector);
 };
 const context = vm.createContext({document:{querySelector:node,querySelectorAll:()=>[],activeElement:null},URL,Date,console});
