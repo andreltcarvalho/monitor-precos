@@ -193,3 +193,8 @@ Consulta as leituras da peça e do período diretamente no Supabase, mantendo RL
 - Preço anunciado e presença antiga separados; datas, resultado e configuração sob demanda.
 - Pedidos na fila bloqueiam reenvio; cadastro é validado na nuvem antes de chegar ao PC, com erro junto ao formulário.
 - Termos separados por linha viram exclusões independentes; UF escolhida em lista.
+
+### 08/10/2026 — validade do preço mesmo sem rede
+- Mais baratas remove leituras vencidas pelo relógio, sem esperar nova resposta do servidor.
+- Favoritas preserva o último valor e mostra que precisa conferir; cupom vencido deixa de ser o preço atual.
+- Detalhes atualizam a condição preservando foco e seções abertas da mesma oferta.

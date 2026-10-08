@@ -5,7 +5,7 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'
 const currency = value => value == null ? 'Não informado' : (value / 100).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
 const time = stamp => stamp && !Number.isNaN(Date.parse(stamp)) ? new Date(stamp).toLocaleString('pt-BR', {timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : 'Não informado';
 const safeLink = url => { try {const u=new URL(url); return u.protocol==='https:' && !u.username && !u.password ? u.href : ''; } catch {return '';} };
-const state = {tab:'offers', catalog:null, offers:new Map(), comparison:[], busy:new Set(), session:null, coupons:null, pages:new Map(), activeGroup:null,historyRequest:0,couponPage:0,activityPage:0,activityFilter:null,pendingFavorites:new Set(),used:null,usedPages:new Map()};
+const state = {tab:'offers', catalog:null, offers:new Map(), comparison:[], busy:new Set(), session:null, coupons:null, pages:new Map(), activeGroup:null,historyRequest:0,couponPage:0,activityPage:0,activityFilter:null,pendingFavorites:new Set(),used:null,usedPages:new Map(),catalogExpiry:Infinity,detailId:null};
 const icon = path => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg>`;
 const star = icon('m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z');
 const tabIcons={offers:'M4 6h16v14H4ZM8 6V4h8v2M8 10h8M8 14h5',parts:'M7 7h10v10H7ZM9 3v4m6-4v4M9 17v4m6-4v4M3 9h4m-4 6h4m10-6h4m-4 6h4',coupons:'M4 6h16v4a2 2 0 0 0 0 4v4H4v-4a2 2 0 0 0 0-4ZM13 6v3m0 3v1m0 3v2',history:'M4 4v16h16M7 15l4-4 4 2 5-7',used:'M4 10l8-6 8 6v10H4ZM9 20v-6h6v6',sources:'M12 12V5M5 19v-6h14v6M9 5h6M2 19h6m8 0h6',activity:'M3 12h4l3-7 4 14 3-7h4'};
@@ -54,6 +54,7 @@ async function reloadCatalog() {
   state.catalog=await api('/api/catalog');state.offers.clear();
   for(const row of state.catalog.offers)state.offers.set(row.id,row);
   for(const group of state.catalog.groups)for(const row of group.offers)state.offers.set(row.id,row);
+  state.catalogExpiry=nextPriceExpiry();
   state.comparison=state.comparison.filter(id=>state.offers.has(id)&&!state.offers.get(id).hidden);
   const parts=state.catalog.components.map(p=>({value:String(p.id),label:p.name}));
   options($('#offer-part'),parts,'Todas');options($('#history-part'),parts);
@@ -80,6 +81,19 @@ function renderConnection() {
     const pending=state.catalog.commands?.some(row=>['pending','running'].includes(row.status)&&['session_open','session_confirm'].includes(row.action)&&row.payload?.shop===button.dataset.name);
     button.disabled=!recent||!!pending;
   }
+}
+
+function currentOffers(group) {return group.offers.filter(row=>row.valid_until&&Date.parse(row.valid_until)>Date.now());}
+function nextPriceExpiry() {
+  const stamps=[...state.offers.values()].map(row=>Date.parse(row.valid_until)).filter(stamp=>stamp>Date.now());
+  return stamps.length?Math.min(...stamps):Infinity;
+}
+function refreshTimedPrices() {
+  renderConnection();
+  if(!state.catalog||state.catalogExpiry>Date.now())return;
+  state.catalogExpiry=nextPriceExpiry();renderOffers();
+  if($('#offer-details').open)details(state.offers.get(state.detailId));
+  if(state.used)renderUsed();
 }
 
 function filtered(row) {
@@ -140,7 +154,7 @@ async function saveFavorite(id) {
 
 function offerRows(group) {
   const selection=$('#offer-selection').value;
-  const rows=selection?[...state.offers.values()].filter(row=>row.component_id===group.id&&row[selection]):group.offers;
+  const rows=selection?[...state.offers.values()].filter(row=>row.component_id===group.id&&row[selection]):currentOffers(group);
   return rows.filter(filtered).sort((a,b)=>(a.effective??offerPrice(a).amount??Infinity)-(b.effective??offerPrice(b).amount??Infinity)).slice(0,12);
 }
 function renderOffers() {
@@ -151,7 +165,7 @@ function renderOffers() {
   $('#selection-context').hidden=!selection;
   $('#selection-context').textContent=selection==='favorite'?'Favoritas continuam salvas acima do limite ou com preço antigo. Confira a condição antes de comprar.':'Ofertas ocultadas ficam aqui para você restaurar; podem estar acima do limite ou desatualizadas.';
   const groups=state.catalog.groups.filter(g=>!$('#offer-part').value||String(g.id)===$('#offer-part').value);
-  $('#piece-picker').innerHTML=`<button data-action="select-piece" data-id="" aria-pressed="${!$('#offer-part').value}"><strong>Todas as peças</strong><span>${state.catalog.groups.length} acompanhadas</span></button>`+state.catalog.groups.map(group=>`<button data-action="select-piece" data-id="${group.id}" aria-pressed="${String(group.id)===$('#offer-part').value}"><strong>${escapeHtml(group.name)}</strong><span>${group.offers.length?'A partir de '+currency(offerPrice(group.offers[0]).amount):'Sem ofertas'}</span></button>`).join('');
+  $('#piece-picker').innerHTML=`<button data-action="select-piece" data-id="" aria-pressed="${!$('#offer-part').value}"><strong>Todas as peças</strong><span>${state.catalog.groups.length} acompanhadas</span></button>`+state.catalog.groups.map(group=>`<button data-action="select-piece" data-id="${group.id}" aria-pressed="${String(group.id)===$('#offer-part').value}"><strong>${escapeHtml(group.name)}</strong><span>${currentOffers(group).length?'A partir de '+currency(offerPrice(currentOffers(group)[0]).amount):'Sem ofertas'}</span></button>`).join('');
   $$('.selection-tabs button').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.selection===selection)));
   $('#clear-filters').hidden=!($('#offer-search').value||$('#offer-shop').value);
   if(!groups.some(group=>group.id===state.activeGroup&&offerRows(group).length))state.activeGroup=groups.find(group=>offerRows(group).length)?.id??groups[0]?.id;
@@ -367,13 +381,18 @@ function renderActivity() {
 }
 function details(row) {
   if(!row)return;
+  const same=state.detailId===row.id;state.detailId=row.id;
+  const focus=$('#offer-details').contains(document.activeElement)?document.activeElement?.dataset.action:null;
+  const open=new Set(same?$$('#details-content details[open]').map(detail=>detail.querySelector('summary').textContent):[]);
   if(!$('#offer-details').open)state.detailTrigger=document.activeElement;
   const {amount,coupon}=offerPrice(row),current=row.valid_until&&Date.parse(row.valid_until)>Date.now();
   const priceRows=[['Pix',row.pix],['Total no cartão',row.card],['Preço anunciado',row.announced],[current?'Com cupom na sua sessão':'Último preço com cupom',row.coupon_price]].filter(([,value])=>value!=null);
   const records=[['Conferência',row.status],['Origem',row.origins||row.shop],['Conferido',time(row.checked_at)],['Recebido',time(row.received_at)]];
   const duplicates=(row.duplicate_ids||[]).map(id=>state.offers.get(id)).filter(item=>item&&item.id!==row.id&&safeLink(item.url));
   $('#details-content').innerHTML=`<p class="detail-store">${escapeHtml(row.shop)}${row.seller&&row.seller.toLowerCase().replace(/\W/g,'')!==row.shop.toLowerCase().replace(/\W/g,'')?' · '+escapeHtml(row.seller):''}</p><h3>${escapeHtml(row.title)}</h3><div class="detail-price"><strong>${currency(amount)}</strong><span>${!current?'Último valor lido · precisa conferir':coupon?'Com cupom na sua sessão':row.pix!=null?'no Pix':'Conforme anunciado pela loja'}</span></div><dl class="price-breakdown">${priceRows.map(([label,value])=>`<dt>${label}</dt><dd>${currency(value)}</dd>`).join('')}<dt>Frete</dt><dd>Não consultado</dd>${row.brand?`<dt>Marca</dt><dd>${escapeHtml(row.brand)}</dd>`:''}</dl><details class="disclosure"><summary>Origem e conferência</summary><dl>${records.map(([label,value])=>`<dt>${label}</dt><dd>${escapeHtml(value)}</dd>`).join('')}</dl>${duplicates.length?`<p class="muted">Outros anúncios reunidos nesta oferta:</p>${duplicates.map(item=>`<p><a href="${escapeHtml(safeLink(item.url))}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.title)}</a></p>`).join('')}`:''}</details>${row.message?`<details class="disclosure"><summary>Mensagem original</summary><p>${escapeHtml(row.message)}</p></details>`:''}<div class="actions detail-actions">${safeLink(row.url)?`<a class="offer-open" href="${escapeHtml(safeLink(row.url))}" target="_blank" rel="noopener noreferrer">Ver oferta</a>`:''}<button class="secondary" data-action="check" data-id="${escapeHtml(row.id)}">${state.session.cloud_shops.includes(row.shop)?'Conferir preço online':'Conferir pelo PC'}</button><button class="text" data-action="hidden" data-id="${escapeHtml(row.id)}">${row.hidden?'Restaurar oferta':'Ocultar oferta'}</button></div>`;
+  $$('#details-content details').forEach(detail=>detail.open=open.has(detail.querySelector('summary').textContent));
   if(!$('#offer-details').open)$('#offer-details').showModal();
+  if(focus)$$('#details-content [data-action]').find(button=>button.dataset.action===focus)?.focus({preventScroll:true});
 }
 
 async function showTab(name,updateUrl=true) {
@@ -450,6 +469,6 @@ document.addEventListener('click',async event=>{
     else if(action.startsWith('olx-')){if(action==='olx-delete'&&!confirm('Excluir esta busca da OLX?'))return;await command(action.replace('-','_'),{id:Number(id),enabled:enabled==='true'});renderUsed();}
   });
 });
-setInterval(()=>{renderConnection();for(const button of $$('[data-action=scan]')){const id=Number(button.dataset.id),remaining=Date.parse(button.dataset.nextAt)-Date.now();button.disabled=state.busy.has(id)||button.dataset.enabled!=='true'||remaining>0;button.textContent=state.busy.has(id)?'Buscando nas lojas…':remaining>0?'Atualizar em '+Math.ceil(remaining/60000)+' min':'Atualizar esta peça';}},15000);
+setInterval(()=>{refreshTimedPrices();for(const button of $$('[data-action=scan]')){const id=Number(button.dataset.id),remaining=Date.parse(button.dataset.nextAt)-Date.now();button.disabled=state.busy.has(id)||button.dataset.enabled!=='true'||remaining>0;button.textContent=state.busy.has(id)?'Buscando nas lojas…':remaining>0?'Atualizar em '+Math.ceil(remaining/60000)+' min':'Atualizar esta peça';}},15000);
 setInterval(async()=>{if(state.session&&document.visibilityState==='visible'&&['offers','activity','sources','coupons','used'].includes(state.tab)){try{await reloadCatalog();if(state.tab==='coupons')await loadCoupons();if(state.tab==='sources')await loadSources();if(state.tab==='used')await loadUsed();}catch(error){notice(error.message);}}},60000);
 start();

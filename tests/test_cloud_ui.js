@@ -18,7 +18,7 @@ run(`state.catalog={groups:[{id:1,name:'Placa',offers:[]},{id:2,name:'Fonte',off
       valid_until:new Date(Date.now()+600000).toISOString(),favorite:i===10};
     state.catalog.groups[0].offers.push(row);state.offers.set(row.id,row);
   }
-  state.catalog.groups[1].offers.push({id:'psu',component_id:2,title:'Fonte Corsair',shop:'Pichau',pix:40000});`);
+  state.catalog.groups[1].offers.push({id:'psu',component_id:2,title:'Fonte Corsair',shop:'Pichau',pix:40000,valid_until:new Date(Date.now()+600000).toISOString()});`);
 node('#offer-part').value='1';
 run('renderOffers()');
 assert.equal((node('#offer-groups').innerHTML.match(/class="offer-card/g)||[]).length,6);
@@ -137,3 +137,14 @@ run('state.usedPages.set(1,1);renderUsed();');assert.match(node('#used-list').in
 run(`state.catalog.commands=[{action:'olx_scan',status:'pending',payload:{id:1}}];renderUsed();`);
 assert.match(node('#used-list').innerHTML,/disabled>Pedido enviado/);
 console.log('Used listings: eligibility, price order, pagination, stale data and queued requests passed.');
+
+run(`state.catalog.groups=[{id:1,name:'Placa',offers:[{id:'expired',component_id:1,title:'Expirada',pix:100000,shop:'Pichau',valid_until:'2000-01-01T00:00:00Z'},{id:'live',component_id:1,title:'Atual',pix:200000,shop:'Pichau',valid_until:new Date(Date.now()+60000).toISOString()}]}];state.offers=new Map(state.catalog.groups[0].offers.map(row=>[row.id,row]));`);
+node('#offer-selection').value='';node('#offer-part').value='1';node('#offer-search').value='';
+run('state.catalogExpiry=0;refreshTimedPrices();');
+assert.doesNotMatch(node('#offer-groups').innerHTML,/offer-title[^>]*>Expirada/);
+assert.match(node('#piece-picker').innerHTML,/A partir de.*2\.000,00/);
+assert.equal(run('offerRows(state.catalog.groups[0]).length'),1);
+assert.ok(run('state.catalogExpiry>Date.now()'));
+run(`state.offers.get('expired').favorite=true;`);node('#offer-selection').value='favorite';run('renderOffers();');
+assert.match(node('#offer-groups').innerHTML,/Precisa conferir/);
+console.log('Price validity: expired catalogue data disappears without a response; saved prices stay explicit.');

@@ -91,3 +91,8 @@ Correção de contrato: source_save/olx_save usam o nome já presente no payload
 Reutilizar a regra OLX de elegibilidade sem instanciar coletor/navegador; API marca elegibilidade e ignora registros sem busca correspondente. Cartões ordenados por preço, seis por página; separar preço anunciado de presença confirmada, datas/configuração sob demanda e bloquear pedido repetido na fila. Validar API com cidade/teto/exclusões, UI com dados sintéticos identificados e estado vazio real.
 
 Rodada 14: 67 testes cloud aprovados. UI JS protege elegibilidade/preço/paginação/antiguidade/fila. Chrome/ASGI validou seis cartões, foco na troca de página, consulta sem reenvio e formulário inválido que preserva os campos; cadastro correto normaliza exclusões por linha. Captura OLX usa fixtures explicitamente sintéticas; produção ainda sem buscas sincronizadas, sem alegar coleta real.
+
+## Rodada 15 — validade visual independente da rede
+Reavaliar preços quando o relógio cruza valid_until, sem esperar resposta HTTP. Mais baratas remove leituras vencidas; favoritas/ocultas mantêm o último valor com aviso. Se os detalhes estiverem abertos, atualizar condição preservando foco e disclosures. Comparação usa o preço com cupom só enquanto válido. Validar clock e detalhes no Chrome.
+
+Rodada 15: quatro testes JS e Chrome/ASGI aprovados. Teste de relógio protege catálogo e preço salvo; Chrome verifica atualização dos detalhes com foco preservado.
