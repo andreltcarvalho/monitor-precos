@@ -8,6 +8,7 @@ from pathlib import Path
 
 from nicegui import app, ui
 from starlette.middleware.trustedhost import TrustedHostMiddleware
+from starlette.responses import RedirectResponse
 
 from core import BRAND_ALIASES, Store, brl, coupon_is_today, group_offers, money, price_is_current, top_offers, valid_url
 from forms import component_draft, component_input_errors
@@ -22,6 +23,21 @@ DATA = ROOT / 'data'
 OFFERS_PER_PAGE = 6
 store = Store(DATA / 'monitor.sqlite3')
 monitor = Monitor(store, DATA)
+
+
+class CloudPanelRedirectMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope['type'] == 'http' and scope['path'] == '/':
+            response = RedirectResponse('https://monitor-precos-snowy.vercel.app', status_code=307)
+            await response(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
+
+
+app.add_middleware(CloudPanelRedirectMiddleware)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=['127.0.0.1', 'localhost'])
 
 
