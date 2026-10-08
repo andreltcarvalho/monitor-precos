@@ -177,3 +177,8 @@ Consulta as leituras da peça e do período diretamente no Supabase, mantendo RL
 - Consulta do histórico mostra carregamento e ignora respostas antigas após mudar a condição.
 - Falha oferece retentativa e remove o gráfico da seleção anterior.
 - Listas anunciam contagens sem reler todos os cartões a cada atualização.
+
+### 08/10/2026 — pedidos com contexto
+- Atividade identifica a peça, anúncio, grupo, busca ou cupom de cada pedido.
+- Nome do registro é preservado no pedido; nomes de registros existentes vêm da própria conta.
+- Registros anteriores usam o contexto disponível, sem inventar nomes.

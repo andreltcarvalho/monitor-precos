@@ -115,3 +115,12 @@ assert.equal(run('age(new Date(Date.now()+20000).toISOString())'),'agora','Small
 assert.equal(run('age(new Date(Date.now()+600000).toISOString())'),'Horário não informado');
 run(`state.catalog.status=[{name:'PC conectado',checked_at:new Date(Date.now()+600000).toISOString()}];renderConnection();`);
 assert.equal(node('#connection').textContent,'PC sem sincronização');
+
+assert.equal(run("commandContext({action:'coupon_retry',payload:{code:'NOVO'}})"),'NOVO');
+assert.equal(run("commandContext({action:'scan',payload:{component_id:9,label:'Placa escolhida'}})"),'Placa escolhida');
+assert.equal(run("commandContext({action:'source_toggle',payload:{id:1}})"),'Grupo #1');
+assert.equal(run("commandContext({action:'scan',payload:{component_id:999}})"),'Peça #999');
+
+run(`state.catalog.commands=[{action:'source_toggle',payload:{id:1,label:'<img src=x onerror=alert(1)>'},status:'pending',created_at:new Date().toISOString()}];state.activityFilter='pending';renderActivity();`);
+assert.match(node('#activity-list').innerHTML,/&lt;img/);assert.doesNotMatch(node('#activity-list').innerHTML,/<img/);
+console.log('Activity: named requests, old-request fallback and escaping passed.');

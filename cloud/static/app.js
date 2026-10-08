@@ -317,6 +317,18 @@ async function loadUsed() {
     const rows=body.listings.filter(row=>row.search_id===search.id);return `<section class="group"><div class="group-heading"><div><h3>${escapeHtml(search.name)}</h3><p class="muted">${escapeHtml(search.city)} / ${escapeHtml(search.state)} · ${escapeHtml(search.status)}</p></div><div class="actions"><button class="secondary" data-action="olx-scan" data-id="${search.id}">Consultar no PC</button><button class="text" data-action="olx-toggle" data-id="${search.id}" data-enabled="${!search.enabled}">${search.enabled?'Pausar':'Ativar'}</button><button class="text danger" data-action="olx-delete" data-id="${search.id}">Excluir</button></div></div><div class="offer-grid">${rows.map(row=>`<article class="offer-card"><h4 class="offer-title">${escapeHtml(row.title)}</h4><div class="offer-price">${currency(row.price)}</div><p>${escapeHtml(row.location)} · ${escapeHtml(row.published_text)}</p><p class="offer-freshness">Conferido ${time(row.checked_at)}</p>${safeLink(row.url)?`<a class="offer-open" href="${escapeHtml(safeLink(row.url))}" target="_blank" rel="noopener noreferrer">Ver anúncio</a>`:''}</article>`).join('')}</div>${!rows.length?'<p class="empty">Nenhum anúncio sincronizado para esta busca.</p>':''}</section>`;
   }).join('')||'<p class="empty">Cadastre uma busca ou conecte o PC para trazer suas buscas existentes.</p>';
 }
+function commandContext(row) {
+  const payload=row.payload||{};
+  if(payload.label)return payload.label;
+  if(payload.code)return payload.code;
+  if(payload.shop)return payload.shop;
+  if(payload.name)return payload.name;
+  if(payload.component_id!=null)return state.catalog?.components.find(part=>part.id===payload.component_id)?.name||'Peça #'+payload.component_id;
+  if(payload.key)return state.offers.get(payload.key)?.display?.title||state.offers.get(payload.key)?.title||'Oferta';
+  if(payload.id!=null)return (row.action.startsWith('source_')?'Grupo #':'Busca #')+payload.id;
+  return '';
+}
+
 function renderActivity() {
   const labels={scan:'Buscar ofertas da peça no PC',check:'Conferir oferta',coupon_batch:'Aplicar cupons de hoje',coupon_retry:'Retentar cupons',coupon_disabled:'Alterar cupom',component_delete:'Excluir peça',source_save:'Adicionar grupo',source_toggle:'Alterar grupo',source_delete:'Excluir grupo',olx_save:'Adicionar busca OLX',olx_scan:'Consultar OLX',olx_toggle:'Alterar busca OLX',olx_delete:'Excluir busca OLX',session_open:'Abrir Chrome para login',session_confirm:'Confirmar sessão do Chrome'};
   const statuses={pending:'Aguardando o PC',running:'Recebido pelo PC',done:'Concluído',failed:'Falhou'};
@@ -334,7 +346,7 @@ function renderActivity() {
   $('#activity-list').innerHTML=rows.slice(offset,offset+10).map(row=>{
     const canceled=row.status==='failed'&&row.detail==='Cancelado pelo usuário.';
     const stale=row.status==='running'&&Date.now()-Date.parse(row.updated_at)>600000;
-    return `<div class="row"><div class="copy"><h3>${escapeHtml(labels[row.action]||row.action)}${row.payload?.shop?' · '+escapeHtml(row.payload.shop):''}</h3><p>${escapeHtml(row.detail||'Pedido salvo na fila.')} ${stale?'Sem confirmação recente; confira o monitor local antes de tentar novamente.':''}</p><p class="muted">${time(row.created_at)}</p></div><div class="row-actions"><span class="badge ${canceled?'':row.status==='done'?'good':row.status==='failed'?'bad':'warn'}">${canceled?'Cancelado':stale?'Sem confirmação':statuses[row.status]}</span>${row.status==='pending'&&row.action!=='component_delete'?`<button class="text" data-action="command-cancel" data-id="${escapeHtml(row.id)}">Cancelar pedido</button>`:''}</div></div>`;
+    return `<div class="row"><div class="copy"><h3>${escapeHtml(labels[row.action]||row.action)}${commandContext(row)?' · '+escapeHtml(commandContext(row)):''}</h3><p>${escapeHtml(row.detail||'Pedido salvo na fila.')} ${stale?'Sem confirmação recente; confira o monitor local antes de tentar novamente.':''}</p><p class="muted">${time(row.created_at)}</p></div><div class="row-actions"><span class="badge ${canceled?'':row.status==='done'?'good':row.status==='failed'?'bad':'warn'}">${canceled?'Cancelado':stale?'Sem confirmação':statuses[row.status]}</span>${row.status==='pending'&&row.action!=='component_delete'?`<button class="text" data-action="command-cancel" data-id="${escapeHtml(row.id)}">Cancelar pedido</button>`:''}</div></div>`;
   }).join('')||empty(state.activityFilter==='pending'?'Nenhum pedido pendente':'Nenhum pedido finalizado',state.activityFilter==='pending'?'As ações enviadas ao PC aparecerão aqui até serem concluídas.':'O resultado dos pedidos ficará neste histórico.');
 }
 function details(row) {

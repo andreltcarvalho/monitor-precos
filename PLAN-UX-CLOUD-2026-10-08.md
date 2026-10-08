@@ -74,3 +74,8 @@ Rodada 10: teste JS de resposta lenta, reenvio, reversão por anúncio agrupado 
 Histórico mostra consulta em andamento, preserva apenas a resposta mais recente e oferece retentativa no próprio painel quando falha; nenhum gráfico antigo continua sob um filtro novo após erro. Listas não anunciam todo o conteúdo a cada atualização: comunicar contagens/estados separados. Validar concorrência, erro, retentativa e Chrome.
 
 Rodada 11: teste JS de respostas fora de ordem, falha, retentativa e vazio aprovado. Chrome/ASGI confirmou aria-busy/carregamento com API bloqueada. Produção anterior: sete páginas sem erro JS/HTTP/overflow.
+
+## Rodada 12 — contexto dos pedidos
+Pedidos do PC identificam peça, anúncio, grupo, busca ou código de cupom. Rótulos de registros existentes vêm da própria conta no servidor e sobrevivem à exclusão; registros antigos usam contexto disponível ou identificação explícita, sem inventar nomes. Validar contrato do worker, propriedade e escaping na interface.
+
+Rodada 12: 62 testes cloud, JS de contexto/escaping e Chrome/ASGI aprovados; worker continua usando os mesmos campos, apenas ignora o rótulo adicional.

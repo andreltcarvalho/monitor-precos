@@ -109,6 +109,20 @@ class ApiTests(unittest.TestCase):
         app.dependency_overrides.clear()
         self.client.close()
 
+    def test_queued_context_uses_owned_saved_name_instead_of_client_label(self):
+        self.repo.data['sources','7']={'id':7,'name':'Grupo real'}
+        result=self.client.post('/api/commands',json={'action':'source_toggle','payload':{'id':7,'enabled':False,'label':'Rótulo falso'}})
+        self.assertEqual(result.status_code,200)
+        self.assertEqual(self.repo.queued[-1]['payload']['label'],'Grupo real')
+        self.assertEqual(self.repo.queued[-1]['payload']['id'],7)
+        self.repo.data['olx_searches','3']={'id':3,'name':'Placa em Piracicaba'}
+        self.client.post('/api/commands',json={'action':'olx_scan','payload':{'id':3}})
+        self.assertEqual(self.repo.queued[-1]['payload']['label'],'Placa em Piracicaba')
+
+    def test_component_delete_preserves_name_for_activity_after_removal(self):
+        self.assertEqual(self.client.delete('/api/components/1').status_code,200)
+        self.assertEqual(self.repo.queued[-1]['payload']['label'],part()['name'])
+
     def test_private_configuration_rejected_in_export(self):
         response = self.client.post('/api/worker/push', json={'rows': [
             {'kind': 'settings', 'record_key': 'telegram_api_hash', 'data': {'value': 'private'}}]})

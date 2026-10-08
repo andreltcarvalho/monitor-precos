@@ -197,10 +197,11 @@ async def save_component(data: dict = Body(...), repo=Depends(repository)):
 
 @app.delete('/api/components/{identifier}')
 async def delete_component(identifier: int, repo=Depends(repository)):
-    if not await repo.get('components', identifier):
+    part = await repo.get('components', identifier)
+    if not part:
         raise HTTPException(404, 'Peça não encontrada.')
     await repo.put('overrides', 'component:' + str(identifier), {'deleted': True, 'id': identifier})
-    await repo.command('component_delete', {'component_id': identifier})
+    await repo.command('component_delete', {'component_id': identifier, 'label': part['name'][:120]})
     return {'detail': 'Peça removida do painel. O PC receberá a alteração ao conectar.'}
 
 
@@ -348,7 +349,7 @@ async def scan(identifier: int, repo=Depends(repository)):
     finally:
         await collectors.close()
     if any(settings.get('shop:' + name, '1') == '1' for name in LOCAL_SHOPS):
-        await repo.command('scan', {'component_id': identifier})
+        await repo.command('scan', {'component_id': identifier, 'label': part['name'][:120]})
     count = sum(row['count'] for row in statuses)
     failed = [row['name'] for row in statuses if row['failures']]
     detail = f'{count} leituras online concluídas.'
@@ -447,10 +448,17 @@ async def command(data: dict = Body(...), repo=Depends(repository)):
                 return await check_offer(collectors, repo, part, old)
             finally:
                 await collectors.close()
-    if action in {'source_toggle', 'source_delete'} and not await repo.get('sources', payload.get('id', '')):
-        raise HTTPException(404, 'Fonte não encontrada.')
-    if action in {'olx_toggle', 'olx_delete', 'olx_scan'} and not await repo.get('olx_searches', payload.get('id', '')):
-        raise HTTPException(404, 'Busca não encontrada.')
+    payload = {key: value for key, value in payload.items() if key != 'label'}
+    if action == 'check':
+        payload['label'] = old.get('title', '')[:120]
+    if action in {'source_toggle', 'source_delete', 'olx_toggle', 'olx_delete', 'olx_scan'}:
+        kind = 'sources' if action.startswith('source_') else 'olx_searches'
+        saved = await repo.get(kind, payload.get('id', ''))
+        if not saved:
+            raise HTTPException(404, 'Fonte não encontrada.' if kind == 'sources' else 'Busca não encontrada.')
+        payload['label'] = str(saved.get('name', ''))[:120]
+    if action in {'source_save', 'olx_save'}:
+        payload['label'] = str(payload.get('name', ''))[:120]
     return await repo.command(action, payload)
 
 
