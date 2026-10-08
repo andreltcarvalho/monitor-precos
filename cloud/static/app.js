@@ -11,11 +11,19 @@ const star = icon('m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6
 const tabIcons={offers:'M4 6h16v14H4ZM8 6V4h8v2M8 10h8M8 14h5',parts:'M7 7h10v10H7ZM9 3v4m6-4v4M9 17v4m6-4v4M3 9h4m-4 6h4m10-6h4m-4 6h4',coupons:'M4 6h16v4a2 2 0 0 0 0 4v4H4v-4a2 2 0 0 0 0-4ZM13 6v3m0 3v1m0 3v2',history:'M4 4v16h16M7 15l4-4 4 2 5-7',used:'M4 10l8-6 8 6v10H4ZM9 20v-6h6v6',sources:'M12 12V5M5 19v-6h14v6M9 5h6M2 19h6m8 0h6',activity:'M3 12h4l3-7 4 14 3-7h4'};
 let noticeTimer,refreshPromise;
 function notice(message) { $('#notice-message').textContent=message; $('#notice').hidden=false; clearTimeout(noticeTimer); noticeTimer=setTimeout(()=>$('#notice').hidden=true,9000); }
-function signedOut() {$('#boot').hidden=true; $('#workspace').hidden=true; $('#login').hidden=false; state.session=null;state.catalog=null;state.offers.clear();state.coupons=null; }
+function signedOut() {$$('dialog[open]').forEach(dialog=>dialog.close());$('#boot').hidden=true; $('#workspace').hidden=true; $('#login').hidden=false; state.session=null;state.catalog=null;state.offers.clear();state.coupons=null; }
+async function apiFetch(path, options, timeout=30000) {
+  try {return await fetch(path,{...options,signal:AbortSignal.timeout(timeout)});}
+  catch(error) {
+    if(options.method!=='GET'&&!path.startsWith('/api/auth/'))throw new Error('Não foi possível confirmar a resposta. Confira o resultado em Atividade ou Fontes antes de enviar novamente.');
+    throw new Error(error.name==='TimeoutError'?'O servidor demorou para responder. Tente novamente.':'A conexão com o servidor foi interrompida. Tente novamente.');
+  }
+}
 async function api(path, data, method, retried=false) {
-  const response=await fetch(path, {method:method || (data===undefined?'GET':'POST'),credentials:'same-origin',headers:data===undefined?{}:{'Content-Type':'application/json'},body:data===undefined?undefined:JSON.stringify(data)});
+  const timeout=path.startsWith('/api/scan/')?150000:path==='/api/commands'?75000:path==='/api/coupons/refresh'?45000:30000;
+  const response=await apiFetch(path, {method:method || (data===undefined?'GET':'POST'),credentials:'same-origin',headers:data===undefined?{}:{'Content-Type':'application/json'},body:data===undefined?undefined:JSON.stringify(data)},timeout);
   if(response.status===401 && !path.startsWith('/api/auth/') && !retried) {
-    if(!refreshPromise)refreshPromise=fetch('/api/auth/refresh',{method:'POST',credentials:'same-origin'}).then(response=>response.ok).finally(()=>refreshPromise=null);
+    if(!refreshPromise)refreshPromise=apiFetch('/api/auth/refresh',{method:'POST',credentials:'same-origin'}).then(response=>response.ok).finally(()=>refreshPromise=null);
     const refreshed=await refreshPromise;
     if(refreshed) return api(path,data,method,true);
     signedOut(); throw new Error('Sessão expirada. Entre novamente.');
@@ -130,10 +138,11 @@ function renderOffers() {
 }
 function renderComparison() {
   const rows=state.comparison.map(id=>state.offers.get(id)).filter(Boolean);
-  $('#comparison').hidden=!rows.length;
-  if(!rows.length)return;
-  const open=$('#comparison details')?.open;
-  $('#comparison').innerHTML=`<details class="comparison-panel" ${open?'open':''}><summary>Comparar ${rows.length} de 3 ofertas ${rows.length===1?'· selecione outra oferta da mesma peça':''}</summary><div class="section-heading"><h3>${escapeHtml(state.catalog.components.find(p=>p.id===rows[0].component_id)?.name||'Comparação')}</h3><button class="text" data-action="clear-comparison">Limpar comparação</button></div><div class="table-scroll"><table><thead><tr><th>Condição</th>${rows.map(r=>`<th>${escapeHtml(r.display?.title||r.title)}<br>${escapeHtml(r.shop)}</th>`).join('')}</tr></thead><tbody>${[['Pix','pix'],['Total no cartão','card'],['Preço anunciado','announced'],['Com cupom','coupon_price']].map(([title,key])=>`<tr><th>${title}</th>${rows.map(r=>`<td>${currency(r[key])}${key==='coupon_price'&&r[key]!=null&&!(r.valid_until&&Date.parse(r.valid_until)>Date.now())?'<small class="comparison-note">Sem confirmação atual</small>':''}</td>`).join('')}</tr>`).join('')}<tr><th>Frete</th>${rows.map(()=>'<td>Não consultado</td>').join('')}</tr></tbody></table></div></details>`;
+  $('#comparison-tray').hidden=!rows.length;
+  $('#offers').classList.toggle('has-comparison',!!rows.length);
+  if(!rows.length){if($('#compare-dialog').open)$('#compare-dialog').close();return;}
+  $('#comparison-tray').innerHTML=`<div><strong>${rows.length} ${rows.length===1?'oferta selecionada':'ofertas selecionadas'}</strong><p>${rows.length===1?'Escolha outra oferta da mesma peça.':escapeHtml(state.catalog.components.find(p=>p.id===rows[0].component_id)?.name||'Mesma peça')}</p></div><div class="actions"><button data-action="open-comparison" ${rows.length<2?'disabled':''}>Comparar lado a lado</button><button class="text" data-action="clear-comparison">Limpar</button></div>`;
+  $('#comparison').innerHTML=`<p class="muted">Compare as condições antes de comprar. Frete não consultado; preço antigo exige conferência.</p><div class="table-scroll"><table><thead><tr><th scope="col">Condição</th>${rows.map(r=>`<th scope="col"><strong>${escapeHtml(r.display?.title||r.title)}</strong><span>${escapeHtml(r.shop)}</span><span class="comparison-note">${escapeHtml(r.display?.verification||'Conferência não informada')} · ${escapeHtml(age(r.checked_at||r.received_at))}</span>${safeLink(r.url)?`<a href="${escapeHtml(safeLink(r.url))}" target="_blank" rel="noopener noreferrer" aria-label="Ver oferta: ${escapeHtml(r.title+' · '+r.shop)}">Ver oferta</a>`:''}</th>`).join('')}</tr></thead><tbody>${[['Pix','pix'],['Total no cartão','card'],['Preço anunciado','announced'],['Cupom da sessão','coupon_price']].map(([title,key])=>`<tr><th scope="row">${title}</th>${rows.map(r=>`<td>${currency(r[key])}${key==='coupon_price'&&r[key]!=null&&!(r.valid_until&&Date.parse(r.valid_until)>Date.now())?'<small class="comparison-note">Sem confirmação atual</small>':''}</td>`).join('')}</tr>`).join('')}<tr><th scope="row">Frete</th>${rows.map(()=>'<td>Não consultado</td>').join('')}</tr></tbody></table></div>`;
 }
 function renderParts() {
   const open=new Set($$('#parts-list details[open]').map(node=>node.dataset.id));
@@ -289,7 +298,7 @@ function details(row) {
 }
 
 async function showTab(name,updateUrl=true) {
-  if(!tabIcons[name])name='offers';state.tab=name;
+  if(!tabIcons[name])name='offers';if(name!=='offers'&&$('#compare-dialog').open)$('#compare-dialog').close();state.tab=name;
   if(updateUrl&&location.hash!=='#'+name)location.hash=name;
   $$('.page').forEach(page=>page.hidden=page.id!==name);$$('#navigation button').forEach(button=>button.dataset.tab===name?button.setAttribute('aria-current','page'):button.removeAttribute('aria-current'));
   document.title=({offers:'Ofertas',parts:'Peças',coupons:'Cupons',history:'Histórico',used:'Usados',sources:'Fontes',activity:'Atividade'}[name])+' · Monitor de peças';
@@ -325,6 +334,8 @@ $('#coupon-apply').addEventListener('click',async()=>{await busy($('#coupon-appl
 $('#coupon-retry').addEventListener('click',async()=>{await busy($('#coupon-retry'),()=>command('coupon_retry',{}));renderCoupons();});
 $('#history-refresh').addEventListener('click',()=>busy($('#history-refresh'),loadHistory));
 $('#history-part').addEventListener('change',()=>loadHistory().catch(e=>notice(e.message)));$('#history-payment').addEventListener('change',()=>loadHistory().catch(e=>notice(e.message)));
+$('#close-comparison').addEventListener('click',()=>$('#compare-dialog').close());
+$('#compare-dialog').addEventListener('close',()=>{if(state.compareTrigger?.isConnected)state.compareTrigger.focus();else $('[data-action=open-comparison]')?.focus();});
 $('#close-details').addEventListener('click',()=>$('#offer-details').close());
 $('#offer-details').addEventListener('close',()=>{const trigger=state.detailTrigger;if(trigger?.isConnected)trigger.focus();else $('#offer-search').focus();});
 $('#offer-groups').addEventListener('toggle',event=>{if(event.target.matches('details[data-group]')&&event.target.open){state.activeGroup=Number(event.target.dataset.group);$$('#offer-groups details[data-group]').forEach(group=>{if(group!==event.target)group.open=false;});}},true);
@@ -337,6 +348,7 @@ document.addEventListener('click',async event=>{
   if(action==='activity-page'){state.activityPage=Number(button.dataset.page);renderActivity();$('#activity-refresh').focus({preventScroll:true});$('#activity-list').scrollIntoView({block:'start'});return;}
   if(action==='remove-brand'){$$('#brands input').find(input=>input.value===name).checked=false;brandChoices();$('#brand-summary').focus();return;}
   if(action==='clear-offer-filters'){$('#clear-filters').click();return;}
+  if(action==='open-comparison'){state.compareTrigger=button;$('#compare-dialog').showModal();return;}
   if(action==='edit-part'){await showTab('parts');editPart(Number(id));return;}if(action==='details'){details(state.offers.get(id));return;}if(action==='clear-comparison'){state.comparison=[];renderOffers();return;}
   if(action==='select-piece'){$('#offer-part').value=id;state.pages.clear();renderOffers();return;}
   if(action==='offer-page'){state.pages.set(Number(id),Number(button.dataset.page));renderOffers();requestAnimationFrame(()=>{$('#piece-'+id)?.focus({preventScroll:true});$('#piece-'+id)?.scrollIntoView({block:'start'});});return;}

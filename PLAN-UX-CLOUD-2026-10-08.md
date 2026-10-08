@@ -48,3 +48,8 @@ Busca e remoção de marcas, campos inválidos com foco/mensagem acessível, cri
 
 ## Rodada 6 — histórico sem baixar todas as peças
 RPC read-only `monitor_recent_observations` com SECURITY INVOKER, auth.uid(), RLS e execução anônima revogada. Consulta somente a peça/período, limitada a 10 mil leituras recentes com indicação de leitura parcial. Migração aplicada pelo plugin; teste SQL com 10.001 leituras, outra peça, data antiga e duas contas passou e foi revertido (0 fixtures restantes). EXPLAIN em dados reais: 13,685 ms, sem novo índice. 56 testes cloud e Chrome/ASGI aprovados. Comparar os pontos após publicar.
+
+Rodada 6 publicada em 633bdce: os históricos das três peças preservaram exatamente os mesmos pontos/valores; mediana de três consultas /history/5 caiu de 4,472 s para 1,755 s (medição pontual, sem promessa de SLA). Sete páginas reais da produção verificadas no Chrome: sem erro JS, HTTP ou overflow.
+
+## Rodada 7 — comparação e conexão
+Barra de comparação com progresso e diálogo sob demanda; leitura e links de cada oferta explícitos. Timeout por tipo de operação e erro de rede legível, distinguindo resultado incerto; expiração da sessão fecha diálogos. Testes JS de timeout/rede e Chrome/ASGI de seleção, foco, fechamento e sessão expirada aprovados; captura real da comparação sem erro/overflow.

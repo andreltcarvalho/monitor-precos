@@ -21,7 +21,7 @@
   <div class="catalog-controls"><div class="selection-tabs" role="group" aria-label="Seleção de ofertas"><button data-selection="" aria-pressed="true">Mais baratas</button><button data-selection="favorite" aria-pressed="false">Favoritas</button><button data-selection="hidden" aria-pressed="false">Ocultas</button></div><label class="selection-field" hidden>Seleção<select id="offer-selection"><option value="">Mais baratas</option><option value="favorite">Favoritas</option><option value="hidden">Ocultas</option></select></label><p id="catalog-meta" class="muted" role="status"></p></div>
   <p id="selection-context" class="selection-context muted" hidden></p>
   <div class="toolbar catalog-toolbar"><label class="grow">Filtrar nesta seleção<input id="offer-search" type="search" placeholder="Modelo, marca ou vendedor"></label><label hidden>Peça<select id="offer-part"><option value="">Todas as peças</option></select></label><label>Loja<select id="offer-shop"><option value="">Todas as lojas</option></select></label><button id="clear-filters" class="text" hidden>Limpar filtros</button></div>
-  <div id="comparison" hidden></div><div id="offer-groups" aria-live="polite"></div>
+  <div id="offer-groups" aria-live="polite"></div><div id="comparison-tray" class="comparison-tray" hidden></div>
 </section>
 <section id="parts" class="page" hidden>
   <div class="section-heading"><div><h2>Suas peças</h2><p class="muted">Ajuste o teto de preço, as marcas e o que deseja acompanhar.</p></div><button id="add-part">Adicionar peça</button></div>
@@ -43,4 +43,5 @@
 <section id="activity" class="page" hidden><div class="section-heading"><h2>Atividade</h2><button id="activity-refresh" class="secondary">Atualizar</button></div><div id="activity-tabs" class="state-tabs" role="group" aria-label="Filtrar atividade"></div><p id="activity-context" class="activity-context muted"></p><div id="activity-list" class="rows" aria-live="polite"></div><div id="activity-pagination" class="pagination" hidden></div></section>
 </main></div>
 <dialog id="offer-details" aria-labelledby="detail-title"><div class="dialog-heading"><h2 id="detail-title">Detalhes da oferta</h2><button id="close-details" class="secondary">Fechar</button></div><div id="details-content"></div></dialog>
+<dialog id="compare-dialog" aria-labelledby="compare-title"><div class="dialog-heading"><h2 id="compare-title">Comparar ofertas</h2><button id="close-comparison" class="secondary">Fechar</button></div><div id="comparison"></div></dialog>
 </body></html>

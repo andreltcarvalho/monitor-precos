@@ -153,3 +153,7 @@
 
 ### Histórico cloud
 Consulta as leituras da peça e do período diretamente no Supabase, mantendo RLS e os cálculos de preço. Limite considera as leituras mais recentes e informa truncamento; não apaga histórico.
+
+### Comparação e conexão
+- Seleção de até três ofertas fica acessível em barra discreta; tabela de pagamentos, cupons e conferência abre em diálogo, com links de compra e foco devolvido ao fechar.
+- Requisições têm prazo adequado ao tipo de consulta, erro de conexão em português e mensagem de resultado incerto para operações sem resposta. Sessão expirada fecha os diálogos e permite entrar novamente.

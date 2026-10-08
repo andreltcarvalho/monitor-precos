@@ -51,7 +51,14 @@ async def main():
             await page.locator('#offer-search').fill('Modelo 0');assert await page.locator('.offer-card').count()==1
             await page.locator('[data-action="details"]').click();assert await page.locator('#offer-details').is_visible()
             await page.keyboard.press('Escape');assert await page.locator('[data-action="details"]').evaluate('(el)=>el===document.activeElement')
-            await page.locator('#clear-filters').click();await page.locator('[data-action="favorite"]').first.click()
+            await page.locator('#clear-filters').click()
+            await page.locator('[data-action="compare"]').nth(0).click();assert await page.locator('[data-action="open-comparison"]').is_disabled()
+            await page.locator('[data-action="compare"]').nth(1).click();await page.locator('[data-action="open-comparison"]').click()
+            assert await page.locator('#compare-dialog').is_visible()
+            assert '2.000,00' in await page.locator('#comparison').inner_text()
+            await page.keyboard.press('Escape');assert await page.locator('[data-action="open-comparison"]').evaluate('(el)=>el===document.activeElement')
+            await page.locator('[data-action="clear-comparison"]').click();assert await page.locator('#comparison-tray').is_hidden()
+            await page.locator('[data-action="favorite"]').first.click()
             try:await page.wait_for_function('document.querySelector("[data-action=favorite]").getAttribute("aria-pressed")==="true"',timeout=5000)
             except Exception:
                 print({'requests':requests,'errors':errors,'notice':await page.locator('#notice').inner_text(),'preferences':[(key,value) for (kind,key),value in repo.data.items() if kind=='preferences']});raise
@@ -111,6 +118,12 @@ async def main():
             await page.locator('[data-action="activity-filter"][data-state="history"]').click()
             assert 'Nenhum pedido finalizado' in await page.locator('#activity-list').inner_text()
             await page.set_viewport_size({'width':1024,'height':900});assert not await page.evaluate('document.documentElement.scrollWidth>innerWidth')
+            await page.locator('#navigation [data-tab="offers"]').click();await page.locator('[data-selection="favorite"]').click()
+            await page.locator('[data-action="details"]').click()
+            await page.route('https://monitor.test/api/catalog',lambda route:route.fulfill(status=401,json={'detail':'Sessão expirada'}))
+            await page.route('https://monitor.test/api/auth/refresh',lambda route:route.fulfill(status=401,json={'detail':'Sessão expirada'}))
+            await page.locator('#reload-offers').dispatch_event('click')
+            await page.locator('#login').wait_for();assert not await page.locator('#offer-details').is_visible()
             assert not errors,errors
             await browser.close()
     finally:app.dependency_overrides.clear()
