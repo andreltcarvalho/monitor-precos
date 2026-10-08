@@ -154,3 +154,11 @@ run(`state.offers=new Map([['cheap',{id:'cheap',component_id:1,title:'Atual',sho
 node('#offer-selection').value='favorite';
 assert.equal(run('offerRows({id:1,offers:[]})[0].id'),'cheap');
 console.log('Saved offer order follows the displayed price, including coupon expiration.');
+
+assert.match(run("couponCollectionSummary([{count:67,failures:0},{count:0,failures:1},{count:0,failures:1}])"),/67 cupons consultados.*2 fontes indisponíveis/);
+assert.match(run("couponCollectionSummary([{count:99,failures:1}])"),/Nenhuma fonte respondeu/);
+assert.equal(run("couponCollectionSummary([{count:1,failures:0}])"),'1 cupom consultado.');
+run('state.coupons.collection_status=[{source:"Pelando",failures:1,detail:"Fonte bloqueada"}];renderCoupons()');
+assert.match(node('#coupon-collection summary').textContent,/1 fonte indisponível/);
+assert.match(node('#coupon-collection-status').innerHTML,/Fonte bloqueada/);
+console.log('Public coupons: concise partial result preserves detailed failures.');

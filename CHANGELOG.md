@@ -211,3 +211,7 @@ Consulta as leituras da peça e do período diretamente no Supabase, mantendo RL
 ### Sessão e preços salvos
 - Sair da conta invalida leituras pendentes de catálogo/cupons e limpa a seleção/paginação.
 - Ordenação das ofertas salvas acompanha o preço mostrado, desconsiderando cupom vencido.
+
+### Retorno das buscas públicas
+- Avisos de cupons mostram a quantidade consultada e o número de fontes indisponíveis.
+- Motivos completos permanecem recolhidos no resultado da busca, sem transformar bloqueio em sucesso.

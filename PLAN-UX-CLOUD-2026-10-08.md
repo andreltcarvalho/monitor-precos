@@ -111,3 +111,8 @@ Rodada 17: teste JS de respostas fora de ordem e atualização concorrente aprov
 Invalidar respostas de catálogo/cupons ao sair ou trocar de sessão; limpar seleção e paginação da conta. Ordenar ofertas salvas pelo valor efetivamente exibido, sem depender de preço auxiliar que possa conter cupom antigo. Validar respostas atrasadas e cupom vencido em JS e regressões Chrome.
 
 Rodada 18: cinco suítes JS e Chrome/ASGI aprovados. Teste de saída/troca de sessão confirmou que respostas atrasadas não repõem catálogo/cupons; ordenação usa o preço mostrado. Produção da rodada 17: sete páginas sem erros JS/HTTP/overflow.
+
+## Rodada 19 — resultado público conciso
+Resumo de coleta com quantidade realmente consultada e fontes indisponíveis; falhas completas permanecem no disclosure existente. Nenhuma fonte respondeu não vira sucesso ou ausência de cupons. Validar sucesso, falha parcial e falha total em JS/Chrome.
+
+Rodada 19: JS e Chrome/ASGI aprovados; falha parcial mostra contagem sem apagar o motivo e falha total informa preservação do dia.

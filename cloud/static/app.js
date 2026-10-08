@@ -272,6 +272,10 @@ async function loadSources() {
 }
 
 async function loadCoupons() {const request=++state.couponsRequest,session=state.session,first=!state.coupons;let body;try{body=await api('/api/coupons');}catch(error){if(request===state.couponsRequest&&state.session===session&&session)throw error;return;}if(request!==state.couponsRequest||state.session!==session||!session)return;state.coupons=body;const shops=[...new Set(state.coupons.coupons.map(c=>c.shop))].sort();options($('#coupon-shop'),shops,'Todas');if(first&&shops.includes('Mercado Livre'))$('#coupon-shop').value='Mercado Livre';renderCoupons();}
+function couponCollectionSummary(statuses) {
+  const failures=statuses.filter(row=>row.failures>0).length,count=statuses.reduce((sum,row)=>sum+(row.failures>0?0:row.count||0),0);
+  return statuses.length&&failures===statuses.length?'Nenhuma fonte respondeu. Últimos cupons de hoje preservados.':`${count} ${count===1?'cupom consultado':'cupons consultados'}.`+(failures?` ${failures} ${failures===1?'fonte indisponível':'fontes indisponíveis'}; veja o resultado da busca.`:'');
+}
 function renderCoupons() {
   if(!state.coupons)return;
   const schedule=state.coupons.schedule;
@@ -279,6 +283,8 @@ function renderCoupons() {
   if(schedule)$('#coupon-schedule').textContent=schedule.state==='running'?'Buscando cupons públicos na nuvem…':`Busca pública automática a cada hora, mesmo com o PC desligado. ${schedule.state==='failed'?'Última tentativa falhou; os resultados anteriores foram preservados.':'Última busca '+age(schedule.checked_at)+'.'}`;
   const statuses=state.coupons.collection_status||[];
   $('#coupon-collection').hidden=!statuses.length;
+  const failures=statuses.filter(row=>row.failures>0).length;
+  $('#coupon-collection summary').textContent='Resultado da busca pública'+(failures?' · '+failures+' '+(failures===1?'fonte indisponível':'fontes indisponíveis'):'');
   $('#coupon-collection-status').innerHTML=statuses.map(row=>`<p><strong>${escapeHtml(row.source)}</strong>: ${escapeHtml(row.detail)} <span class="muted">· ${time(row.checked_at)}</span></p>`).join('');
   const focus=document.activeElement?.closest('[data-action]')?.dataset;
   const search=$('#coupon-search').value.toLowerCase().trim(),shop=$('#coupon-shop').value,group=$('#coupon-state').value;
@@ -454,7 +460,7 @@ $('#source-form').addEventListener('submit',event=>{event.preventDefault();const
 $('#used-form').addEventListener('submit',event=>{event.preventDefault();const form=event.currentTarget,draft=Object.fromEntries(new FormData(form));draft.mode='fields';draft.url='';$('#used-error').textContent='';busy(event.submitter,async()=>{try{await command('olx_save',draft);form.reset();form.elements.state.value='SP';form.closest('details').open=false;await loadUsed();}catch(error){$('#used-error').textContent=error.message;}});});
 $('#copy-url').addEventListener('click',()=>busy($('#copy-url'),async()=>{await navigator.clipboard.writeText(location.origin);notice('Endereço copiado.');}));
 for(const selector of ['#coupon-search','#coupon-shop','#coupon-state'])$(selector).addEventListener(selector==='#coupon-search'?'input':'change',()=>{state.couponPage=0;renderCoupons();});
-$('#coupon-refresh').addEventListener('click',()=>busy($('#coupon-refresh'),async()=>{const body=await api('/api/coupons/refresh',{});notice(body.status.map(s=>s.detail).join(' · '));await loadCoupons();}));
+$('#coupon-refresh').addEventListener('click',()=>busy($('#coupon-refresh'),async()=>{const body=await api('/api/coupons/refresh',{});notice(couponCollectionSummary(body.status));await loadCoupons();}));
 $('#coupon-apply').addEventListener('click',async()=>{await busy($('#coupon-apply'),()=>command('coupon_batch',{}));renderCoupons();});
 $('#coupon-retry').addEventListener('click',async()=>{await busy($('#coupon-retry'),()=>command('coupon_retry',{}));renderCoupons();});
 $('#history-refresh').addEventListener('click',()=>busy($('#history-refresh'),loadHistory));
