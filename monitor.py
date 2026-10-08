@@ -62,7 +62,7 @@ class Monitor:
         self.shop_scan_component_id = None
         self.next_ml_scan = 0
         self.next_coupon_scan = 0
-        self.coupon_status = 'Melhores Cartões · aguardando primeira consulta'
+        self.coupon_status = 'Cupons públicos · aguardando primeira consulta'
         self.cloud = CloudSync(self, data_dir)
 
     async def start(self):
@@ -351,13 +351,13 @@ class Monitor:
                             pass
                         if force_ml or now >= self.next_coupon_scan:
                             self.next_coupon_scan = now + 1800
-                            self.coupon_status = 'Melhores Cartões · consultando cupons…'
+                            self.coupon_status = 'Cupons públicos · consultando cupons…'
                             try:
                                 public = await self.shops.public_coupon_list()
                                 self.store.set_setting('public_coupons', json.dumps(public, ensure_ascii=False))
-                                self.coupon_status = f'Melhores Cartões · {len(public)} cupons/ativações consultados'
+                                self.coupon_status = f'Cupons públicos · {len(public)} cupons/ativações consultados'
                             except (ValueError, httpx.HTTPError):
-                                self.coupon_status = 'Melhores Cartões · consulta indisponível; última leitura preservada'
+                                self.coupon_status = 'Cupons públicos · consulta indisponível; última leitura preservada'
                 if self.store.get_setting('shop:' + shop, '1') != '1':
                     self.shop_status[shop] = 'Consulta pausada'
                     continue

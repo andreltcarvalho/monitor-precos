@@ -1,5 +1,9 @@
 # Alterações
 
+## 2026-10-08
+
+- Melhores Cartões removido dos cupons do Mercado Livre, incluindo cache e tentativas antigas nas listas e lotes. Resultados anteriores de ativação são preservados quando o mesmo código aparece em uma fonte válida. Pelando integrado por HTTP com código explícito, estado ativo, publicação no dia de São Paulo e condições para todo o site ou informática/eletrônicos; selecionados sem categoria, outras categorias, primeira compra, antigos e duplicados são descartados. 225 testes específicos aprovados e compilação limpa; coleta real encontrou um cupom relevante do Mercado Livre entre 82 publicações do Pelando.
+
 ## 2026-10-07
 
 - Painel cloud reorganizado para desktop: navegação lateral, seleção de peça, seis cartões por página mantendo as 12 mais baratas, modelo/specs resumidos e preço/pagamento em destaque. Favoritos por estrela, comparação recolhida e informações completas no diálogo. Peças abre na lista, cadastros de peças/grupos/OLX sob demanda; cupons mostram loja/estado e preservam condições abertas. Diretrizes de divulgação progressiva NN/g e estrutura W3C aplicadas. 495 testes Python aprovados, regressões JavaScript e validação isolada pelo navegador; coleta, histórico, credenciais e dados locais preservados.

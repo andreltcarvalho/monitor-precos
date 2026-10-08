@@ -10,7 +10,7 @@ import httpx
 from core import Store, group_offers, price_is_current, utcnow
 from monitor import Monitor, notify_windows
 from presentation import coupon_catalog, coupon_page, group_caption, offer_card_data
-from shops import PUBLIC_COUPONS_URL, Shops, coupon_shop, public_coupons
+from shops import PELANDO_COUPONS_URL, PUBLIC_COUPONS_URL, Shops, coupon_shop, public_coupons
 
 
 class FreshnessAndCouponTests(unittest.IsolatedAsyncioTestCase):
@@ -205,14 +205,14 @@ class PublishedCouponTests(unittest.TestCase):
 
     def html(self):
         return '''<table><tr><td>LOJA</td><td>REGRA</td><td>CUPOM</td><td>LINK</td></tr>
-        <tr><td><img></td><td>10% OFF em eletrônicos acima de R$ 149</td><td><b>GPU10</b></td><td><a href="https://www.mercadolivre.com.br/ofertas">aqui</a></td></tr>
+        <tr><td><img></td><td>10% OFF em eletrônicos acima de R$ 149</td><td><b>GPU10</b></td><td><a href="https://www.kabum.com.br/ofertas">aqui</a></td></tr>
         <tr><td></td><td>Produtos selecionados</td><td>Ative no link</td><td><a href="https://www.amazon.com.br/promotion/test">aqui</a></td></tr>
         <tr><td></td><td>Outra loja</td><td>MODA10</td><td><a href="https://example.com">aqui</a></td></tr></table>'''
 
     def test_public_table_keeps_codes_conditions_activations_and_source(self):
         rows = public_coupons(self.html())
         self.assertEqual(len(rows), 2)
-        self.assertEqual((rows[0]['code'], rows[0]['shop']), ('GPU10', 'Mercado Livre'))
+        self.assertEqual((rows[0]['code'], rows[0]['shop']), ('GPU10', 'KaBuM'))
         self.assertIn('eletrônicos', rows[0]['conditions'])
         self.assertEqual(rows[0]['source_url'], PUBLIC_COUPONS_URL)
         self.assertTrue(rows[1]['activation'])
@@ -247,10 +247,11 @@ class PublicCouponFetchTests(unittest.IsolatedAsyncioTestCase):
         urls = []
         def respond(request):
             urls.append(str(request.url))
-            return httpx.Response(200, text=PublishedCouponTests().html())
+            html = '<article class="card" data-deal-id="empty"></article>' if str(request.url) == PELANDO_COUPONS_URL else PublishedCouponTests().html()
+            return httpx.Response(200, text=html)
         shops.client = httpx.AsyncClient(transport=httpx.MockTransport(respond))
         try:
             self.assertEqual(len(await shops.public_coupon_list()), 2)
-            self.assertEqual(urls, [PUBLIC_COUPONS_URL])
+            self.assertEqual(urls, [PUBLIC_COUPONS_URL, PELANDO_COUPONS_URL])
         finally:
             await shops.close()

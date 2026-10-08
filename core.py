@@ -504,7 +504,8 @@ class Store:
             cached = self.get_setting(key)
             if cached is not None:
                 items = json.loads(cached)
-                today = [item for item in items if coupon_is_today(item.get('found_at') or item.get('checked_at'), now)]
+                today = [item for item in items if coupon_is_today(item.get('found_at') or item.get('checked_at'), now)
+                         and not (item.get('source') == 'Melhores Cartões' and item.get('shop') == 'Mercado Livre')]
                 if today != items:
                     self.set_setting(key, json.dumps(today, ensure_ascii=False))
         self.db.commit()

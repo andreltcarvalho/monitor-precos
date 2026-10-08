@@ -3,13 +3,14 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qsl, quote, urljoin, urlsplit
 from pathlib import Path
 
 import httpx
 from bs4 import BeautifulSoup
 
-from core import AMOUNT, coupons, detect_brand, effective_price, matches, money, normalized, prices, utcnow, valid_url
+from core import AMOUNT, coupon_is_today, coupons, detect_brand, effective_price, matches, money, normalized, prices, utcnow, valid_url
 from mercado_livre_browser import MELI_HOSTS, MercadoLivreBrowser
 from shopee_browser import SHOPEE_HOSTS, ShopeeBrowser, validate_shopee_page
 
@@ -22,6 +23,7 @@ REDIRECT_HOSTS = STORE_HOSTS | {'meli.la', 'mercadolivre.com', 'www.mercadolivre
 SHOP_NAMES = ('Pichau', 'Mercado Livre', 'KaBuM', 'Amazon', 'Shopee', 'Terabyte Shop')
 COUPON_SHOPS = SHOP_NAMES + ('AliExpress',)
 PUBLIC_COUPONS_URL = 'https://www.melhorescartoes.com.br/cupom-desconto.html'
+PELANDO_COUPONS_URL = 'https://www.pelando.com.br/cupons-de-descontos/mercado-livre'
 
 
 def shop_name(url: str) -> str:
@@ -89,7 +91,7 @@ def public_coupons(html: str) -> list[dict]:
             anchor = cells[3].find('a', href=True)
             url = anchor['href'] if anchor else ''
             shop = coupon_shop(cells[0].get_text(' ', strip=True), [url])
-            if shop not in SHOP_NAMES or not valid_url(url):
+            if shop not in SHOP_NAMES or shop == 'Mercado Livre' or not valid_url(url):
                 continue
             code = cells[2].get_text(' ', strip=True)
             activation = normalized(code) == 'ative no link'
@@ -101,6 +103,48 @@ def public_coupons(html: str) -> list[dict]:
             if not any((previous['shop'], previous['code'], previous['conditions']) == (shop, item['code'], item['conditions']) for previous in result):
                 result.append(item)
     return result[:200]
+
+
+def pelando_coupons(html: str, now: datetime | None = None) -> list[dict]:
+    soup = BeautifulSoup(html, 'html.parser')
+    cards = soup.select('article.card[data-deal-id]')
+    if not cards:
+        raise ValueError('Pelando não apresentou cartões de cupons legíveis.')
+    now = now or datetime.now(timezone.utc)
+    result, seen = [], set()
+    for card in cards:
+        cta = card.select_one('.card__cta[data-store-name="Mercado Livre"][data-status="active"]')
+        button = card.select_one('[data-copy-code]')
+        title, description = card.select_one('.card__title'), card.select_one('.card__description')
+        author, link = card.select_one('.card__author'), card.select_one('a.card__pill[href]')
+        if not all((cta, button, title, author, link)):
+            continue
+        code = button['data-copy-code'].strip().upper()
+        conditions = title.get_text(' ', strip=True) + (' · ' + description.get_text(' ', strip=True) if description else '')
+        text = normalized(conditions)
+        hardware = re.search(r'\b(?:informatica|eletronicos|hardware|componentes|pecas de computador)\b', text)
+        general = re.search(r'\b(?:todo (?:o )?site|site todo)\b', text)
+        if re.search(r'primeira compra|novos usuarios|novas contas|nunca .*compr', text):
+            continue
+        if not hardware and (not general or re.search(r'\bselecionados?\b', text)):
+            continue
+        age = re.search(r'\bha\s+(\d+)\s*(segundos?|secs?|minutos?|mins?|horas?|hs?)\b',
+                        normalized(author.get_text(' ', strip=True)))
+        if not age or not re.fullmatch(r'[A-Z0-9][A-Z0-9_-]{2,39}', code):
+            continue
+        unit = age[2]
+        seconds = int(age[1]) * (3600 if unit.startswith('h') else 60 if unit.startswith('min') else 1)
+        published = now - timedelta(seconds=seconds)
+        source_url = urljoin(PELANDO_COUPONS_URL, link['href'])
+        if not coupon_is_today(published.isoformat(), now) or code in seen:
+            continue
+        if urlsplit(source_url).hostname != 'www.pelando.com.br' or not urlsplit(source_url).path.startswith('/d/'):
+            continue
+        seen.add(code)
+        result.append(dict(shop='Mercado Livre', code=code, conditions=conditions,
+                           url='https://www.mercadolivre.com.br/cupons', source='Pelando', source_url=source_url,
+                           activation=False, checked_at=now.isoformat(), found_at=published.isoformat()))
+    return result
 
 
 def structured_products(soup: BeautifulSoup) -> list[dict]:
@@ -551,11 +595,14 @@ class Shops:
         return result
 
     async def public_coupon_list(self) -> list[dict]:
-        response = await self.client.get(PUBLIC_COUPONS_URL)
-        response.raise_for_status()
-        if len(response.content) > 6_000_000:
-            raise ValueError('Fonte pública de cupons acima do limite de leitura.')
-        return public_coupons(response.text)
+        result = []
+        for url, parser in ((PUBLIC_COUPONS_URL, public_coupons), (PELANDO_COUPONS_URL, pelando_coupons)):
+            response = await self.client.get(url)
+            response.raise_for_status()
+            if len(response.content) > 6_000_000:
+                raise ValueError('Fonte pública de cupons acima do limite de leitura.')
+            result.extend(parser(response.text))
+        return result
 
     async def close(self):
         if self.shopee_browser:

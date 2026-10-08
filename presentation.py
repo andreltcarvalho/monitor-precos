@@ -71,6 +71,8 @@ def coupon_catalog(posts: list[dict], official: list[dict], public: list[dict], 
                          conditions=item['conditions'], stamp=item.get('checked_at'), found_at=item.get('found_at') or item.get('checked_at'), timestamp_kind='checked', url=item['url'],
                          source_url='https://www.pichau.com.br/promocao/cupons', activation=False))
     for item in public:
+        if item.get('source') == 'Melhores Cartões' and item.get('shop') == 'Mercado Livre':
+            continue
         try:
             stamp = datetime.fromisoformat(item['checked_at'])
             if stamp.tzinfo is None:

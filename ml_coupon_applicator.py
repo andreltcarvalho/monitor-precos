@@ -88,7 +88,12 @@ class CouponApplicator:
                     codes.setdefault(code, dict(code=code, source=row['source'], status='new', detail='',
                                                 attempted_at='', attempts=0, disabled=0, found_at=row['found_at'], conditions=row['conditions']))
         for row in self.history():
-            codes[row['code']] = dict(codes.get(row['code'], {}), **row)
+            if row.get('source') == 'Melhores Cartões' and row['code'] not in codes:
+                continue
+            current = codes.get(row['code'], {})
+            codes[row['code']] = dict(current, **row)
+            if row.get('source') == 'Melhores Cartões' and current:
+                codes[row['code']]['source'] = current['source']
         return [dict(row, **application_state(row, row['code'] == self.current_code)) for row in codes.values()]
 
     def candidates(self, retry_only=False, code=None):

@@ -280,9 +280,14 @@ async def get_coupons(repo=Depends(repository)):
             continue
         code = item['code'].upper()
         row = applications.pop(code, {'code': code, 'status': 'new', 'detail': '', 'found_at': item.get('found_at'), 'source': item.get('source'), 'attempts': 0})
+        if row.get('source') == 'Melhores Cartões':
+            row = dict(row, source=item.get('source'))
         ml.append(dict(row, **application_state(row)))
-    ml.extend(dict(row, **application_state(row)) for row in applications.values())
+    ml.extend(dict(row, **application_state(row)) for row in applications.values()
+              if row.get('source') != 'Melhores Cartões')
     for row in applications.values():
+        if row.get('source') == 'Melhores Cartões':
+            continue
         coupons.append({'code': row['code'], 'shop': 'Mercado Livre', 'source': row.get('source'),
                         'stamp': row.get('found_at'), 'conditions': '', 'url': ''})
     return {'coupons': coupons, 'applications': ml}
