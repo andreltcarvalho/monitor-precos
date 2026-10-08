@@ -29,7 +29,7 @@ async def main():
     repo.data['sources','1']={'id':1,'name':'Grupo teste','reference':'-100123456789','enabled':1}
     repo.data['status','worker']={'name':'PC conectado','checked_at':utcnow(),'sessions':{'Mercado Livre':{'configured':True,'login_open':False,'detail':'Perfil salvo'}}}
     app.dependency_overrides[repository]=lambda:repo
-    errors=[];requests=[];favorite_gate=asyncio.Event();favorite_gate.set()
+    errors=[];requests=[];favorite_gate=asyncio.Event();favorite_gate.set();history_gate=asyncio.Event();history_gate.set()
     try:
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='https://monitor.test') as client,async_playwright() as p:
             browser=await p.chromium.launch(channel='chrome',headless=True)
@@ -37,6 +37,8 @@ async def main():
             async def route(request):
                 from urllib.parse import urlsplit
                 parsed=urlsplit(request.request.url)
+                if parsed.path.startswith('/api/history/'):
+                    await history_gate.wait()
                 if parsed.path.startswith('/api/preferences/'):
                     await favorite_gate.wait()
                 response=await client.request(request.request.method,parsed.path+('?' +parsed.query if parsed.query else ''),content=request.request.post_data,headers={'Origin':'https://monitor.test','Content-Type':'application/json'})
@@ -73,6 +75,14 @@ async def main():
             except Exception:
                 print({'requests':requests,'errors':errors,'notice':await page.locator('#notice').inner_text(),'preferences':[(key,value) for (kind,key),value in repo.data.items() if kind=='preferences']});raise
             await page.locator('[data-selection="favorite"]').click();assert await page.locator('.offer-card').count()==1
+            await page.locator('#navigation [data-tab="history"]').click()
+            await page.wait_for_function('document.querySelector("#history-loading").hidden')
+            history_gate.clear()
+            await page.locator('#history-payment').select_option('card')
+            assert await page.locator('#history-loading').is_visible()
+            assert await page.locator('#history-result').get_attribute('aria-busy')=='true'
+            history_gate.set()
+            await page.wait_for_function('document.querySelector("#history-loading").hidden')
             await page.locator('#navigation [data-tab="coupons"]').click()
             await page.wait_for_function('document.querySelector("#coupons-list").getAttribute("aria-busy")===null')
             assert await page.locator('#coupon-shop').input_value()=='Mercado Livre'

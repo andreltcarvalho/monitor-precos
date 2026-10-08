@@ -172,3 +172,8 @@ Consulta as leituras da peça e do período diretamente no Supabase, mantendo RL
 - Estrela atualiza imediatamente e bloqueia cliques repetidos enquanto salva.
 - Falhas restauram o estado e consultam a confirmação da nuvem, inclusive em anúncios agrupados.
 - Validação com resposta de API lenta, falha parcial e sessão expirada.
+
+### 08/10/2026 — histórico e estados acessíveis
+- Consulta do histórico mostra carregamento e ignora respostas antigas após mudar a condição.
+- Falha oferece retentativa e remove o gráfico da seleção anterior.
+- Listas anunciam contagens sem reler todos os cartões a cada atualização.

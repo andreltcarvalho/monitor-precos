@@ -272,6 +272,7 @@ function renderCoupons() {
   state.couponPage=Math.min(state.couponPage,Math.max(0,Math.ceil(selected.length/12)-1));
   const offset=state.couponPage*12;
   $('#coupon-pagination').hidden=selected.length<=12;
+  $('#coupon-count').textContent=selected.length+' '+(selected.length===1?'cupom nesta seleção':'cupons nesta seleção');
   $('#coupon-pagination').innerHTML=`<span>${offset+1}–${Math.min(offset+12,selected.length)} de ${selected.length} cupons</span><div class="actions"><button class="secondary" data-action="coupon-page" data-page="${state.couponPage-1}" ${offset===0?'disabled':''} aria-label="Página anterior de cupons">Anterior</button><button class="secondary" data-action="coupon-page" data-page="${state.couponPage+1}" ${offset+12>=selected.length?'disabled':''} aria-label="Próxima página de cupons">Próxima</button></div>`;
   $('#coupons-list').innerHTML=selected.slice(offset,offset+12).map(c=>{
     const applied=application(c),status=applied?.group||'new',source=safeLink(c.source_url),link=safeLink(c.url);
@@ -282,14 +283,23 @@ function renderCoupons() {
 }
 
 async function loadHistory() {
-  const id=$('#history-part').value;if(!id){$('#history-result').innerHTML=empty('Seu histórico começa com uma peça','Cadastre uma peça para acompanhar a evolução dos preços.');return;}
-  const payment=$('#history-payment').value,request=++state.historyRequest;
-  const result=await api('/api/history/'+id+'?payment='+payment);
-  if(request!==state.historyRequest)return;
-  $('#history-context').textContent=payment==='effective'?'Inclui o cupom confirmado em cada leitura e pode comparar condições de pagamento diferentes.':'Somente leituras confirmadas nesta condição de pagamento.';
-  if(!result.points.length){$('#history-result').innerHTML=empty('Ainda não há preços confirmados','As buscas alimentarão o histórico desta peça. Frete e cupons não confirmados ficam fora.');return;}
-  $('#history-result').innerHTML=historyView(result);
+  const id=$('#history-part').value,request=++state.historyRequest;
+  if(!id){$('#history-context').textContent='';$('#history-loading').hidden=true;$('#history-result').removeAttribute('aria-busy');$('#history-result').innerHTML=empty('Seu histórico começa com uma peça','Cadastre uma peça para acompanhar a evolução dos preços.');return;}
+  const payment=$('#history-payment').value;
+  $('#history-loading').hidden=false;$('#history-result').setAttribute('aria-busy','true');
+  try {
+    const result=await api('/api/history/'+id+'?payment='+payment);
+    if(request!==state.historyRequest)return;
+    $('#history-context').textContent=payment==='effective'?'Inclui o cupom confirmado em cada leitura e pode comparar condições de pagamento diferentes.':'Somente leituras confirmadas nesta condição de pagamento.';
+    $('#history-result').innerHTML=result.points.length?historyView(result):empty('Ainda não há preços confirmados','As buscas alimentarão o histórico desta peça. Frete e cupons não confirmados ficam fora.');
+  } catch(error) {
+    if(request!==state.historyRequest)return;
+    $('#history-context').textContent='';loadError('history-result',error);
+  } finally {
+    if(request===state.historyRequest){$('#history-loading').hidden=true;$('#history-result').removeAttribute('aria-busy');}
+  }
 }
+
 function historyView(result) {
   const points=result.points,max=Math.max(...points.map(p=>p.price)),min=Math.min(...points.map(p=>p.price));
   const start=Date.parse(points[0].date),end=Date.parse(points.at(-1).date),range=Math.max(1,end-start),spread=Math.max(10000,max-min);
@@ -320,7 +330,7 @@ function renderActivity() {
   const offset=state.activityPage*10;
   $('#activity-pagination').hidden=rows.length<=10;
   $('#activity-pagination').innerHTML=`<span>${offset+1}–${Math.min(offset+10,rows.length)} de ${rows.length} pedidos</span><div class="actions"><button class="secondary" data-action="activity-page" data-page="${state.activityPage-1}" ${offset===0?'disabled':''} aria-label="Página anterior de atividade">Anterior</button><button class="secondary" data-action="activity-page" data-page="${state.activityPage+1}" ${offset+10>=rows.length?'disabled':''} aria-label="Próxima página de atividade">Próxima</button></div>`;
-  $('#activity-context').textContent=state.activityFilter==='pending'?'O PC recebe os pedidos ao sincronizar. Você pode cancelar enquanto estiverem na fila.':'Últimos 50 pedidos finalizados. As consultas online ficam em Fontes.';
+  $('#activity-context').textContent=rows.length+' '+(rows.length===1?'pedido. ':'pedidos. ')+(state.activityFilter==='pending'?'O PC recebe os pedidos ao sincronizar. Você pode cancelar enquanto estiverem na fila.':'Últimos 50 pedidos finalizados. As consultas online ficam em Fontes.');
   $('#activity-list').innerHTML=rows.slice(offset,offset+10).map(row=>{
     const canceled=row.status==='failed'&&row.detail==='Cancelado pelo usuário.';
     const stale=row.status==='running'&&Date.now()-Date.parse(row.updated_at)>600000;
@@ -348,7 +358,7 @@ async function showTab(name,updateUrl=true) {
   if(id)loading(id);
   try {if(name==='sources')await loadSources();if(name==='coupons')await loadCoupons();if(name==='history')await loadHistory();if(name==='used')await loadUsed();if(name==='activity'||name==='offers'&&!state.catalog)await reloadCatalog();}
   catch(error){if(id)loadError(id,error);else notice(error.message);}
-  finally {if(id)$('#'+id).removeAttribute('aria-busy');}
+  finally {if(id&&(id!=='history-result'||$('#history-loading').hidden))$('#'+id).removeAttribute('aria-busy');}
 }
 
 $('#navigation').addEventListener('click',event=>{const button=event.target.closest('button');if(button)showTab(button.dataset.tab);});

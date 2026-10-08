@@ -69,3 +69,8 @@ Rodada 9: JS e Chrome/ASGI aprovados, capturas com dados reais em 1440/1024 sem 
 Estrela muda no clique e bloqueia reenvio enquanto salva todos os anúncios agrupados; sucesso não recarrega o catálogo. Em erro, restaura a indicação e consulta o estado confirmado para resolver falha parcial. Preservar foco e testar resposta lenta, erro/reversão e sessão expirada.
 
 Rodada 10: teste JS de resposta lenta, reenvio, reversão por anúncio agrupado e expiração de sessão aprovado. Chrome/ASGI confirmou estrela imediata com API bloqueada e ausência de recarga do catálogo após salvar.
+
+## Rodada 11 — consultas e anúncios de estado
+Histórico mostra consulta em andamento, preserva apenas a resposta mais recente e oferece retentativa no próprio painel quando falha; nenhum gráfico antigo continua sob um filtro novo após erro. Listas não anunciam todo o conteúdo a cada atualização: comunicar contagens/estados separados. Validar concorrência, erro, retentativa e Chrome.
+
+Rodada 11: teste JS de respostas fora de ordem, falha, retentativa e vazio aprovado. Chrome/ASGI confirmou aria-busy/carregamento com API bloqueada. Produção anterior: sete páginas sem erro JS/HTTP/overflow.

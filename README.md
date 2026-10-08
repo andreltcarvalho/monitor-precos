@@ -68,6 +68,7 @@ Ative o ambiente virtual existente ou chame seus executáveis diretamente. Coman
 node tests/test_cloud_ui.js
 node tests/test_cloud_auth_ui.js
 node tests/test_cloud_favorites_ui.js
+node tests/test_cloud_history_ui.js
 ```
 
 Os testes Python não precisam de contas reais ou consultas a lojas. O teste JavaScript da UI usa Node.js e não abre navegador. `tests/cloud_schedule.sql` é uma validação separada do agendamento Supabase; requer um projeto Supabase configurado e roda dentro de transação revertida. Testes controlados não comprovam que uma loja aceite uma sessão ou consulta real.
