@@ -44,6 +44,13 @@ class FakeRepository:
     async def delete(self, kind, key):
         self.data.pop((kind, str(key)), None)
 
+    async def preference(self, key, field, enabled):
+        if not await self.get('offers', key):
+            return None
+        value = dict(self.data.get(('preferences', key), {}), **{field: enabled})
+        await self.put('preferences', key, value)
+        return value
+
     async def history(self, component, since_day):
         keys = {key for (kind, key), value in self.data.items() if kind == 'offers' and value['component_id'] == component}
         rows = [value for (kind, _), value in self.data.items() if kind == 'observations'
@@ -122,6 +129,15 @@ class ApiTests(unittest.TestCase):
     def test_component_delete_preserves_name_for_activity_after_removal(self):
         self.assertEqual(self.client.delete('/api/components/1').status_code,200)
         self.assertEqual(self.repo.queued[-1]['payload']['label'],part()['name'])
+
+    def test_preference_keeps_other_fields_and_refuses_unknown_offer(self):
+        self.repo.data['offers','one']=offer('one',200000)
+        self.repo.data['preferences','one']={'favorite':True}
+        result=self.client.post('/api/preferences/one',json={'field':'hidden','enabled':True})
+        self.assertEqual(result.json(),{'favorite':True,'hidden':True})
+        self.assertEqual(self.client.post('/api/preferences/missing',json={'field':'hidden','enabled':True}).status_code,404)
+        for value in ({'field':'arbitrary','enabled':True},{'field':'hidden','enabled':'false'}):
+            self.assertEqual(self.client.post('/api/preferences/one',json=value).status_code,422)
 
     def test_private_configuration_rejected_in_export(self):
         response = self.client.post('/api/worker/push', json={'rows': [
@@ -448,6 +464,12 @@ class RepositoryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await repo.history(5, '2026-10-01'), {'rows': [], 'truncated': False})
             self.assertEqual(repo.request.call_args.args, ('POST', 'rpc/monitor_recent_observations'))
             self.assertEqual(repo.request.call_args.kwargs['data'], {'component_key': '5', 'since_day': '2026-10-01'})
+
+    async def test_preference_uses_one_atomic_rpc(self):
+        with patch.dict(os.environ,SUPABASE_URL='https://test.supabase.co',SUPABASE_PUBLISHABLE_KEY='public-test'):
+            repo=Repository(None,'session','owner-a');repo.request=AsyncMock(return_value={'favorite':True,'hidden':False})
+            self.assertEqual(await repo.preference('one','favorite',True),{'favorite':True,'hidden':False})
+            repo.request.assert_awaited_once_with('POST','rpc/monitor_set_preference',data={'offer_key':'one','preference_field':'favorite','enabled':True})
 
     async def test_old_pending_commands_remain_visible_beside_recent_history(self):
         with patch.dict(os.environ, SUPABASE_URL='https://test.supabase.co', SUPABASE_PUBLISHABLE_KEY='public-test'):

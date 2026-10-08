@@ -79,3 +79,8 @@ Rodada 11: teste JS de respostas fora de ordem, falha, retentativa e vazio aprov
 Pedidos do PC identificam peça, anúncio, grupo, busca ou código de cupom. Rótulos de registros existentes vêm da própria conta no servidor e sobrevivem à exclusão; registros antigos usam contexto disponível ou identificação explícita, sem inventar nomes. Validar contrato do worker, propriedade e escaping na interface.
 
 Rodada 12: 62 testes cloud, JS de contexto/escaping e Chrome/ASGI aprovados; worker continua usando os mesmos campos, apenas ignora o rótulo adicional.
+
+## Rodada 13 — preferências independentes
+Favoritar/ocultar usa uma gravação atômica de um único campo no Supabase; ON CONFLICT mescla o estado atual, evitando read-modify-write na API. RPC invoker, RLS, propriedade da oferta e lista explícita de campos. Validar SQL com duas contas, preservação de campos, oferta ausente e API/UI.
+
+Rodada 13: migração aplicada pelo plugin. SQL real validou preservação de campos, alterações isoladas entre duas contas, oferta ausente e rejeição de campo arbitrário; fixtures revertidas. 64 testes cloud, favoritos/histórico JS e Chrome/ASGI aprovados.

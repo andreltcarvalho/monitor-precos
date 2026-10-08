@@ -182,3 +182,8 @@ Consulta as leituras da peça e do período diretamente no Supabase, mantendo RL
 - Atividade identifica a peça, anúncio, grupo, busca ou cupom de cada pedido.
 - Nome do registro é preservado no pedido; nomes de registros existentes vêm da própria conta.
 - Registros anteriores usam o contexto disponível, sem inventar nomes.
+
+### 08/10/2026 — preferências independentes no banco
+- Favoritar e ocultar alteram somente o próprio campo em uma gravação atômica.
+- Evita que ações próximas apaguem a preferência anterior e elimina leituras intermediárias da API.
+- RPC restrita à conta autenticada e à oferta existente.

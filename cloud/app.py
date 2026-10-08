@@ -207,13 +207,11 @@ async def delete_component(identifier: int, repo=Depends(repository)):
 
 @app.post('/api/preferences/{key}')
 async def preference(key: str, data: dict = Body(...), repo=Depends(repository)):
-    if not await repo.get('offers', key):
-        raise HTTPException(404, 'Oferta não encontrada.')
     if data.get('field') not in {'favorite', 'hidden'} or type(data.get('enabled')) is not bool:
         raise HTTPException(422, 'Preferência inválida.')
-    value = await repo.get('preferences', key) or {}
-    value[data['field']] = data['enabled']
-    await repo.put('preferences', key, value)
+    value = await repo.preference(key, data['field'], data['enabled'])
+    if value is None:
+        raise HTTPException(404, 'Oferta não encontrada.')
     return value
 
 
