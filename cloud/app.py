@@ -1,4 +1,4 @@
-"""API e painel da nuvem. Sem banco local, Chrome ou tarefas contínuas."""
+"""API e painel da nuvem. Sem banco local, Chrome ou tarefas contÃ­nuas."""
 import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
@@ -26,24 +26,24 @@ from presentation import coupon_catalog, offer_card_data
 from shops import Shops, shop_name
 
 ASSETS = Path(__file__).parent / 'static'
-app = FastAPI(title='Monitor de peças', docs_url=None, redoc_url=None)
+app = FastAPI(title='Monitor de peÃ§as', docs_url=None, redoc_url=None)
 
 
 @app.middleware('http')
 async def request_guards(request, call_next):
-    # Cookies não autorizam alterações feitas por outra origem. Workers usam Bearer.
+    # Cookies nÃ£o autorizam alteraÃ§Ãµes feitas por outra origem. Workers usam Bearer.
     if request.method not in {'GET', 'HEAD', 'OPTIONS'}:
         origin = request.headers.get('origin')
         expected = os.environ.get('MONITOR_PUBLIC_URL', '').rstrip('/')
         host_origin = f"{request.url.scheme}://{request.headers.get('host', '')}"
         if origin and origin not in {expected, host_origin}:
-            return JSONResponse({'detail': 'Origem da requisição não autorizada.'}, status_code=403)
+            return JSONResponse({'detail': 'Origem da requisiÃ§Ã£o nÃ£o autorizada.'}, status_code=403)
         if not origin and request.cookies.get('monitor_access') and not request.headers.get('authorization'):
             return JSONResponse({'detail': 'Origem ausente; recarregue o painel.'}, status_code=403)
     try:
         size = int(request.headers.get('content-length', '0'))
     except ValueError:
-        return JSONResponse({'detail': 'Tamanho da requisição inválido.'}, status_code=400)
+        return JSONResponse({'detail': 'Tamanho da requisiÃ§Ã£o invÃ¡lido.'}, status_code=400)
     if size < 0 or size > 1_000_000:
         return JSONResponse({'detail': 'Envie os dados em lotes menores.'}, status_code=413)
     if request.method not in {'GET', 'HEAD', 'OPTIONS'}:
@@ -90,7 +90,7 @@ async def auth_call(client, path, data):
     url, key = configuration()
     response = await client.post(url + '/auth/v1/' + path, json=data, headers={'apikey': key})
     if response.is_error:
-        message = 'Não foi possível entrar. Confira e-mail, senha e confirmação do e-mail.'
+        message = 'NÃ£o foi possÃ­vel entrar. Confira e-mail, senha e confirmaÃ§Ã£o do e-mail.'
         if response.status_code == 429:
             message = 'Muitas tentativas. Aguarde alguns minutos antes de tentar novamente.'
         raise HTTPException(400, message)
@@ -105,7 +105,7 @@ async def authentication(action: str, request: Request, data: dict = Body(defaul
             token = request.cookies.get('monitor_access')
             if token:
                 await client.post(url + '/auth/v1/logout?scope=local', headers={'apikey': key, 'Authorization': 'Bearer ' + token})
-            response = JSONResponse({'detail': 'Sessão encerrada.'})
+            response = JSONResponse({'detail': 'SessÃ£o encerrada.'})
             response.delete_cookie('monitor_access')
             response.delete_cookie('monitor_refresh')
             return response
@@ -116,7 +116,7 @@ async def authentication(action: str, request: Request, data: dict = Body(defaul
             session = await auth_call(client, 'token?grant_type=refresh_token', {'refresh_token': token})
             return session_response(request, session)
         if action not in {'login', 'signup'}:
-            raise HTTPException(404, 'Ação desconhecida.')
+            raise HTTPException(404, 'AÃ§Ã£o desconhecida.')
         email, password = str(data.get('email', '')).strip(), str(data.get('password', ''))
         if '@' not in email or len(email) > 254 or not 8 <= len(password) <= 128:
             raise HTTPException(422, 'Informe um e-mail e uma senha com pelo menos 8 caracteres.')
@@ -127,7 +127,7 @@ async def authentication(action: str, request: Request, data: dict = Body(defaul
 
 @app.get('/health')
 def health():
-    return {'app': 'monitor-precos', 'mode': 'cloud', 'configured': bool(os.environ.get('SUPABASE_URL') and os.environ.get('SUPABASE_PUBLISHABLE_KEY'))}
+    return {'app': 'monitor-precos', 'mode': 'cloud', 'region': os.environ.get('VERCEL_REGION', 'local'), 'configured': bool(os.environ.get('SUPABASE_URL') and os.environ.get('SUPABASE_PUBLISHABLE_KEY'))}
 
 
 @app.get('/')
@@ -183,7 +183,7 @@ async def save_component(data: dict = Body(...), repo=Depends(repository)):
     from core import money
     identifier = data.get('id')
     if identifier is not None and not await repo.get('components', str(identifier)):
-        raise HTTPException(404, 'Peça não encontrada.')
+        raise HTTPException(404, 'PeÃ§a nÃ£o encontrada.')
     identifier = int(identifier) if identifier is not None else -secrets.randbelow(2**48-1)-1
     part = {key: data.get(key) for key in ('name', 'kind', 'query', 'capacity_gb')}
     part.update(id=identifier, target=money(data['target_text']) if data.get('target_text', '').strip() else None,
@@ -198,18 +198,18 @@ async def save_component(data: dict = Body(...), repo=Depends(repository)):
 @app.delete('/api/components/{identifier}')
 async def delete_component(identifier: int, repo=Depends(repository)):
     if not await repo.get('components', identifier):
-        raise HTTPException(404, 'Peça não encontrada.')
+        raise HTTPException(404, 'PeÃ§a nÃ£o encontrada.')
     await repo.put('overrides', 'component:' + str(identifier), {'deleted': True, 'id': identifier})
     await repo.command('component_delete', {'component_id': identifier})
-    return {'detail': 'Peça removida do painel. O PC receberá a alteração ao conectar.'}
+    return {'detail': 'PeÃ§a removida do painel. O PC receberÃ¡ a alteraÃ§Ã£o ao conectar.'}
 
 
 @app.post('/api/preferences/{key}')
 async def preference(key: str, data: dict = Body(...), repo=Depends(repository)):
     if not await repo.get('offers', key):
-        raise HTTPException(404, 'Oferta não encontrada.')
+        raise HTTPException(404, 'Oferta nÃ£o encontrada.')
     if data.get('field') not in {'favorite', 'hidden'} or type(data.get('enabled')) is not bool:
-        raise HTTPException(422, 'Preferência inválida.')
+        raise HTTPException(422, 'PreferÃªncia invÃ¡lida.')
     value = await repo.get('preferences', key) or {}
     value[data['field']] = data['enabled']
     await repo.put('preferences', key, value)
@@ -219,10 +219,10 @@ async def preference(key: str, data: dict = Body(...), repo=Depends(repository))
 @app.get('/api/history/{identifier}')
 async def history(identifier: int, payment: str = 'effective', repo=Depends(repository)):
     if payment not in {'pix', 'card', 'announced', 'effective'}:
-        raise HTTPException(422, 'Pagamento inválido.')
+        raise HTTPException(422, 'Pagamento invÃ¡lido.')
     part = next((p for p in await components(repo) if p['id'] == identifier), None)
     if not part:
-        raise HTTPException(404, 'Peça não encontrada.')
+        raise HTTPException(404, 'PeÃ§a nÃ£o encontrada.')
     offers = {o['id']: o for o in await values(repo, 'offers') if o['component_id'] == identifier}
     rows = await values(repo, 'observations')
     today = datetime.now(timezone(timedelta(hours=-3))).date()
@@ -262,7 +262,7 @@ async def sources(repo=Depends(repository)):
 @app.post('/api/shops')
 async def toggle_shop(data: dict = Body(...), repo=Depends(repository)):
     if data.get('name') not in CLOUD_SHOPS + LOCAL_SHOPS or type(data.get('enabled')) is not bool:
-        raise HTTPException(422, 'Loja inválida.')
+        raise HTTPException(422, 'Loja invÃ¡lida.')
     key = 'shop:' + data['name']
     value = {'value': '1' if data['enabled'] else '0'}
     await repo.put('settings', key, value)
@@ -293,13 +293,13 @@ async def get_coupons(repo=Depends(repository)):
             continue
         seen_codes.add(code)
         row = applications.pop(code, {'code': code, 'status': 'new', 'detail': '', 'found_at': item.get('found_at'), 'source': item.get('source'), 'attempts': 0, 'disabled': disabled.get(code, False)})
-        if row.get('source') == 'Melhores Cartões':
+        if row.get('source') == 'Melhores CartÃµes':
             row = dict(row, source=item.get('source'))
         ml.append(dict(row, **application_state(row)))
     ml.extend(dict(row, **application_state(row)) for row in applications.values()
-              if row.get('source') != 'Melhores Cartões')
+              if row.get('source') != 'Melhores CartÃµes')
     for row in applications.values():
-        if row.get('source') == 'Melhores Cartões':
+        if row.get('source') == 'Melhores CartÃµes':
             continue
         coupons.append({'code': row['code'], 'shop': 'Mercado Livre', 'source': row.get('source'),
                         'stamp': row.get('found_at'), 'conditions': '', 'url': ''})
@@ -323,7 +323,7 @@ async def refresh_coupons(repo=Depends(repository)):
                 await repo.put('settings', name, {'value': json.dumps(items, ensure_ascii=False)})
                 statuses.append({'source': name, 'detail': f'{len(items)} cupons consultados.'})
             except (httpx.HTTPError, ValueError):
-                statuses.append({'source': name, 'detail': 'Consulta bloqueada ou indisponível; última leitura preservada.'})
+                statuses.append({'source': name, 'detail': 'Consulta bloqueada ou indisponÃ­vel; Ãºltima leitura preservada.'})
     finally:
         await collectors.close()
     return {'status': statuses}
@@ -333,9 +333,9 @@ async def refresh_coupons(repo=Depends(repository)):
 async def scan(identifier: int, repo=Depends(repository)):
     part = next((p for p in await components(repo) if p['id'] == identifier), None)
     if not part or not part.get('enabled'):
-        raise HTTPException(404, 'Peça não encontrada ou pausada.')
+        raise HTTPException(404, 'PeÃ§a nÃ£o encontrada ou pausada.')
     if not await repo.request('POST', 'rpc/monitor_claim_scan', data={'component_key': str(identifier)}):
-        raise HTTPException(429, 'Esta peça foi consultada há menos de cinco minutos. Aguarde para atualizar.')
+        raise HTTPException(429, 'Esta peÃ§a foi consultada hÃ¡ menos de cinco minutos. Aguarde para atualizar.')
     prefs = {r['record_key']: r['data'] for r in await repo.records('preferences')}
     known = [dict(o, **prefs.get(o['id'], {})) for o in await values(repo, 'offers') if o['component_id'] == identifier]
     settings = {r['record_key']: r['data'].get('value') for r in await repo.records('settings')}
@@ -350,7 +350,7 @@ async def scan(identifier: int, repo=Depends(repository)):
         await repo.command('scan', {'component_id': identifier})
     count = sum(row['count'] for row in statuses)
     failed = [row['name'] for row in statuses if row['failures']]
-    detail = f'{count} leituras online concluídas.'
+    detail = f'{count} leituras online concluÃ­das.'
     if failed:
         detail += ' Falhas em ' + ', '.join(failed) + '; veja Fontes.'
     if any(settings.get('shop:' + name, '1') == '1' for name in LOCAL_SHOPS):
@@ -362,9 +362,9 @@ async def scan(identifier: int, repo=Depends(repository)):
 async def scheduled_collect(request: Request, data: dict = Body(...)):
     secret = os.environ.get('MONITOR_CRON_SECRET', '')
     if not secret:
-        raise HTTPException(503, 'Agendamento ainda não configurado.')
+        raise HTTPException(503, 'Agendamento ainda nÃ£o configurado.')
     if not secrets.compare_digest(request.headers.get('authorization', ''), 'Bearer ' + secret):
-        raise HTTPException(401, 'Agendamento não autorizado.')
+        raise HTTPException(401, 'Agendamento nÃ£o autorizado.')
     part, known, name = data.get('component'), data.get('offers'), data.get('shop')
     if (not isinstance(part, dict) or type(part.get('id')) is not int or not part.get('enabled')
             or part.get('kind') not in {'custom', 'gpu', 'psu', 'ssd'} or not isinstance(part.get('query'), str)
@@ -372,7 +372,7 @@ async def scheduled_collect(request: Request, data: dict = Body(...)):
             or any(not isinstance(row, dict) or not isinstance(row.get('id'), str)
                    or row.get('component_id') != part['id'] or not isinstance(row.get('url'), str)
                    or not valid_url(row['url']) for row in known)):
-        raise HTTPException(422, 'Lote de agendamento inválido.')
+        raise HTTPException(422, 'Lote de agendamento invÃ¡lido.')
     repo = ScheduledReadings(known)
     collectors = Shops()
     try:
@@ -393,18 +393,18 @@ async def command(data: dict = Body(...), repo=Depends(repository)):
     allowed = {'check', 'coupon_batch', 'coupon_retry', 'coupon_disabled', 'source_save', 'source_toggle', 'source_delete',
                'olx_save', 'olx_toggle', 'olx_delete', 'olx_scan', 'session_open', 'session_confirm'}
     if action not in allowed or not isinstance(payload, dict) or len(json.dumps(payload)) > 5000:
-        raise HTTPException(422, 'Pedido inválido.')
+        raise HTTPException(422, 'Pedido invÃ¡lido.')
     if action in {'session_open', 'session_confirm'}:
         if payload.get('shop') not in LOCAL_SHOPS:
-            raise HTTPException(422, 'Escolha Mercado Livre ou Shopee para gerenciar a sessão.')
+            raise HTTPException(422, 'Escolha Mercado Livre ou Shopee para gerenciar a sessÃ£o.')
     if action == 'coupon_disabled':
         code = str(payload.get('code', '')).upper()
         if not re.fullmatch(r'[A-Z0-9][A-Z0-9_-]{2,39}', code) or type(payload.get('disabled')) is not bool:
-            raise HTTPException(422, 'Código ou estado inválido.')
+            raise HTTPException(422, 'CÃ³digo ou estado invÃ¡lido.')
         body = await get_coupons(repo)
         row = next((row for row in body['applications'] if row['code'] == code), None)
         if not row:
-            raise HTTPException(404, 'Cupom de hoje não encontrado.')
+            raise HTTPException(404, 'Cupom de hoje nÃ£o encontrado.')
         saved = {field: row.get(field) for field in
                  ('code', 'status', 'detail', 'found_at', 'source', 'attempts', 'attempted_at')}
         saved['disabled'] = payload['disabled']
@@ -415,22 +415,22 @@ async def command(data: dict = Body(...), repo=Depends(repository)):
     if action == 'check':
         old = await repo.get('offers', payload.get('key', ''))
         if not old:
-            raise HTTPException(404, 'Oferta não encontrada.')
-        # Confia no domínio validado, não no nome vindo do cadastro/snapshot.
+            raise HTTPException(404, 'Oferta nÃ£o encontrada.')
+        # Confia no domÃ­nio validado, nÃ£o no nome vindo do cadastro/snapshot.
         name = shop_name(old.get('url', ''))
         if name in CLOUD_SHOPS:
             part = next((p for p in await components(repo) if p['id'] == old['component_id']), None)
             if not part:
-                raise HTTPException(404, 'Peça não encontrada.')
+                raise HTTPException(404, 'PeÃ§a nÃ£o encontrada.')
             collectors = Shops()
             try:
                 return await check_offer(collectors, repo, part, old)
             finally:
                 await collectors.close()
     if action in {'source_toggle', 'source_delete'} and not await repo.get('sources', payload.get('id', '')):
-        raise HTTPException(404, 'Fonte não encontrada.')
+        raise HTTPException(404, 'Fonte nÃ£o encontrada.')
     if action in {'olx_toggle', 'olx_delete', 'olx_scan'} and not await repo.get('olx_searches', payload.get('id', '')):
-        raise HTTPException(404, 'Busca não encontrada.')
+        raise HTTPException(404, 'Busca nÃ£o encontrada.')
     return await repo.command(action, payload)
 
 
@@ -438,11 +438,11 @@ async def command(data: dict = Body(...), repo=Depends(repository)):
 async def cancel_command(identifier: uuid.UUID, repo=Depends(repository)):
     rows = await repo.request('PATCH', 'monitor_commands', params={
         'owner_id': 'eq.' + repo.owner, 'id': 'eq.' + str(identifier), 'status': 'eq.pending',
-        'action': 'neq.component_delete'}, data={'status': 'failed', 'detail': 'Cancelado pelo usuário.', 'updated_at': utcnow()},
+        'action': 'neq.component_delete'}, data={'status': 'failed', 'detail': 'Cancelado pelo usuÃ¡rio.', 'updated_at': utcnow()},
         prefer='return=representation')
     if not rows:
-        raise HTTPException(409, 'O pedido já foi recebido pelo PC ou não está mais na fila.')
-    return {'detail': 'Pedido cancelado. Ele não será executado pelo PC.'}
+        raise HTTPException(409, 'O pedido jÃ¡ foi recebido pelo PC ou nÃ£o estÃ¡ mais na fila.')
+    return {'detail': 'Pedido cancelado. Ele nÃ£o serÃ¡ executado pelo PC.'}
 
 
 @app.post('/api/worker/pull')
@@ -461,7 +461,7 @@ async def reconcile(data: dict = Body(...), repo=Depends(repository)):
     for kind in ('sources', 'olx_searches'):
         keys = data.get(kind)
         if not isinstance(keys, list) or len(keys) > 10000 or any(not isinstance(key, str) or not key.isdigit() for key in keys):
-            raise HTTPException(422, 'Lista de registros inválida.')
+            raise HTTPException(422, 'Lista de registros invÃ¡lida.')
     for kind in ('sources', 'olx_searches'):
         keep = set(data[kind])
         for row in await repo.records(kind):
@@ -478,7 +478,7 @@ async def reconcile(data: dict = Body(...), repo=Depends(repository)):
 @app.post('/api/worker/ack/{identifier}')
 async def ack(identifier: uuid.UUID, data: dict = Body(...), repo=Depends(repository)):
     if data.get('status') not in {'done', 'failed'}:
-        raise HTTPException(422, 'Estado inválido.')
+        raise HTTPException(422, 'Estado invÃ¡lido.')
     await repo.request('PATCH', 'monitor_commands', params={'id': 'eq.' + str(identifier), 'owner_id': 'eq.' + repo.owner},
                        data={'status': data['status'], 'detail': str(data.get('detail', ''))[:500], 'updated_at': utcnow()})
     return {'ok': True}
@@ -488,19 +488,19 @@ async def ack(identifier: uuid.UUID, data: dict = Body(...), repo=Depends(reposi
 async def push(data: dict = Body(...), repo=Depends(repository)):
     rows = data.get('rows')
     if not isinstance(rows, list) or len(rows) > 100 or len(json.dumps(data)) > 900000:
-        raise HTTPException(422, 'Lote inválido. Envie até 100 registros.')
+        raise HTTPException(422, 'Lote invÃ¡lido. Envie atÃ© 100 registros.')
     safe = []
     for row in rows:
         if not isinstance(row, dict):
-            raise HTTPException(422, 'Registro inválido.')
+            raise HTTPException(422, 'Registro invÃ¡lido.')
         kind, key, value = row.get('kind'), str(row.get('record_key', '')), row.get('data')
         if kind not in SYNC_KINDS or not 1 <= len(key) <= 200 or not isinstance(value, dict):
-            raise HTTPException(422, 'Registro inválido.')
+            raise HTTPException(422, 'Registro invÃ¡lido.')
         if kind == 'settings' and key not in PUBLIC_SETTINGS:
-            raise HTTPException(422, 'Configuração privada não pode ser enviada.')
+            raise HTTPException(422, 'ConfiguraÃ§Ã£o privada nÃ£o pode ser enviada.')
         if kind == 'offers':
             if not valid_url(value.get('url', '')):
-                raise HTTPException(422, 'Link inválido.')
+                raise HTTPException(422, 'Link invÃ¡lido.')
             previous = await repo.get('offers', key)
             if previous and (previous.get('checked_at') or '') > (value.get('checked_at') or ''):
                 continue

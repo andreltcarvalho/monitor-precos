@@ -2,6 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "fastapi",
   "installCommand": null,
-  "regions": ["sfo1"],
+  "regions": ["gru1"],
   "functions": {"cloud/app.py": {"maxDuration": 300}}
 }
