@@ -60,15 +60,28 @@ async function reloadCatalog() {
   if(initial&&parts.length)$('#offer-part').value=parts[0].value;
   options($('#offer-shop'),[...state.session.cloud_shops,...state.session.local_shops],'Todas');
   renderOffers();renderParts();renderActivity();
-  const worker=state.catalog.status.find(row=>row.name==='PC conectado');
-  const recent=worker&&Date.now()-Date.parse(worker.checked_at)<180000;
-  $('#connection').textContent=recent?'PC conectado':'PC sem sincronização';
-  $('#connection').className='connection-state text '+(recent?'connected':'disconnected');
-  $('#connection').title=worker?'Última sincronização: '+time(worker.checked_at):'Conecte o monitor pela aba Fontes. O histórico da nuvem continua disponível.';
+  renderConnection();
   const online=state.catalog.status.filter(row=>state.session.cloud_shops.includes(row.name)&&row.checked_at);
   const successes=new Set(online.filter(row=>row.count>0&&Date.now()-Date.parse(row.checked_at)<3600000).map(row=>row.name));
   $('#cloud-connection').textContent=online.length?successes.size+' '+(successes.size===1?'loja online com leitura recente.':'lojas online com leitura recente.'):'Buscas online independentes do PC.';
 }
+function workerConnected() {
+  const worker=state.catalog?.status?.find(row=>row.name==='PC conectado');
+  const elapsed=worker?Date.now()-Date.parse(worker.checked_at):NaN;
+  return Number.isFinite(elapsed)&&elapsed>=-60000&&elapsed<180000;
+}
+function renderConnection() {
+  if(!state.catalog)return;
+  const worker=state.catalog.status.find(row=>row.name==='PC conectado'),recent=workerConnected();
+  $('#connection').textContent=recent?'PC conectado':'PC sem sincronização';
+  $('#connection').className='connection-state text '+(recent?'connected':'disconnected');
+  $('#connection').title=worker?'Última sincronização: '+time(worker.checked_at):'Conecte o monitor pela aba Fontes. O histórico da nuvem continua disponível.';
+  for(const button of $$('[data-action=session-open],[data-action=session-confirm]')) {
+    const pending=state.catalog.commands?.some(row=>['pending','running'].includes(row.status)&&['session_open','session_confirm'].includes(row.action)&&row.payload?.shop===button.dataset.name);
+    button.disabled=!recent||!!pending;
+  }
+}
+
 function filtered(row) {
   const search=$('#offer-search').value.trim().toLocaleLowerCase('pt-BR');
   return (!$('#offer-shop').value||row.shop===$('#offer-shop').value)&&(!search||`${row.title} ${row.shop} ${row.brand||''} ${row.seller||''}`.toLocaleLowerCase('pt-BR').includes(search));
@@ -80,7 +93,7 @@ function offerPrice(row) {
 }
 function age(stamp) {
   const minutes=Math.floor((Date.now()-Date.parse(stamp))/60000);
-  if(!Number.isFinite(minutes)||minutes<0)return 'Horário não informado';
+  if(!Number.isFinite(minutes)||minutes<-1)return 'Horário não informado';
   if(minutes<1)return 'agora';if(minutes<60)return 'há '+minutes+' min';
   const hours=Math.floor(minutes/60);if(hours<24)return 'há '+hours+' h';
   return 'há '+Math.floor(hours/24)+' dia'+(hours<48?'':'s');
@@ -197,9 +210,11 @@ async function loadSources() {
     return `<div class="row"><div class="copy"><h3>${escapeHtml(shop.name)} <span class="badge ${!shop.enabled?'':failed?'warn':'good'}">${!shop.enabled?'Pausada':failed?'Requer atenção':'Ativa'}</span></h3><p class="muted">${latest?'Última consulta '+age(latest.checked_at):shop.local?'Sessão consultada pelo PC':'Aguardando primeira consulta'}</p>${latest?`<details class="source-status" data-shop="${escapeHtml(shop.name)}" ${open.has('result:'+shop.name)?'open':''}><summary>Resultado das consultas</summary>${statuses.slice(0,5).map(row=>`<p>${escapeHtml(state.catalog.components.find(p=>p.id===row.component_id)?.name||shop.name)}: ${escapeHtml(row.reason||row.detail||row.status||'Resultado não informado')} <span class="muted">· ${time(row.checked_at)}</span></p>`).join('')}</details>`:''}${session}</div><button class="secondary" data-action="shop-toggle" data-name="${escapeHtml(shop.name)}" data-enabled="${shop.enabled?'false':'true'}" aria-label="${shop.enabled?'Pausar':'Ativar'} ${escapeHtml(shop.name)}">${shop.enabled?'Pausar':'Ativar'}</button></div>`;
   }).join('');
   $('#shops-list').innerHTML=`<section class="source-section"><h3>Buscas na nuvem</h3><p class="muted">Continuam com o PC desligado. Cada peça ativa entra no agendamento.</p><div class="shop-grid">${shopRows(false)}</div></section><section class="source-section"><h3>Buscas com seu Chrome</h3><p class="muted">Usam as sessões do monitor e precisam do PC conectado.</p><div class="shop-grid">${shopRows(true)}</div></section>`;
+  $('#telegram-summary').textContent=body.telegram.length+' '+(body.telegram.length===1?'grupo':'grupos')+' · '+body.telegram.filter(row=>row.enabled).length+' ativos';
+  $('#telegram-context').textContent=workerConnected()?'O monitor recebe mensagens novas dos grupos ativos.':'As mensagens novas dependem do monitor no PC. Abra a conexão acima para sincronizar.';
   $('#telegram-list').innerHTML=body.telegram.map(source=>{
     const pending=state.catalog.commands?.some(row=>['pending','running'].includes(row.status)&&['source_toggle','source_delete'].includes(row.action)&&Number(row.payload?.id)===source.id);
-    return `<div class="row"><div class="copy"><h3>${escapeHtml(source.name)}</h3><p class="muted">${pending?'Alteração na fila do PC':source.enabled?'Acompanhando novas mensagens':'Grupo pausado'}</p><details class="source-configuration" data-id="${source.id}" ${sourceOpen.has(String(source.id))?'open':''}><summary>Configuração do grupo</summary><p>Referência: <code>${escapeHtml(source.reference)}</code></p><button class="text danger" data-action="source-delete" data-id="${source.id}" ${pending?'disabled':''}>Excluir grupo</button></details></div><button class="secondary" data-action="source-toggle" data-id="${source.id}" data-enabled="${!source.enabled}" ${pending?'disabled':''} aria-label="${source.enabled?'Pausar':'Ativar'} ${escapeHtml(source.name)}">${source.enabled?'Pausar':'Ativar'}</button></div>`;
+    return `<div class="row"><div class="copy"><h3>${escapeHtml(source.name)}</h3><p class="muted">${pending?'Alteração na fila do PC':source.enabled?(workerConnected()?'Acompanhando novas mensagens':'Aguardando monitor no PC'):'Grupo pausado'}</p><details class="source-configuration" data-id="${source.id}" ${sourceOpen.has(String(source.id))?'open':''}><summary>Configuração do grupo</summary><p>Referência: <code>${escapeHtml(source.reference)}</code></p><button class="text danger" data-action="source-delete" data-id="${source.id}" ${pending?'disabled':''}>Excluir grupo</button></details></div><button class="secondary" data-action="source-toggle" data-id="${source.id}" data-enabled="${!source.enabled}" ${pending?'disabled':''} aria-label="${source.enabled?'Pausar':'Ativar'} ${escapeHtml(source.name)}">${source.enabled?'Pausar':'Ativar'}</button></div>`;
   }).join('')||empty('Nenhum grupo sincronizado','Conecte o monitor do PC para acompanhar mensagens novas do Telegram.');
 }
 
@@ -372,6 +387,6 @@ document.addEventListener('click',async event=>{
     else if(action.startsWith('olx-')){if(action==='olx-delete'&&!confirm('Excluir esta busca da OLX?'))return;await command(action.replace('-','_'),{id:Number(id),enabled:enabled==='true'});}
   });
 });
-setInterval(()=>{for(const button of $$('[data-action=scan]')){const id=Number(button.dataset.id),remaining=Date.parse(button.dataset.nextAt)-Date.now();button.disabled=state.busy.has(id)||button.dataset.enabled!=='true'||remaining>0;button.textContent=state.busy.has(id)?'Buscando nas lojas…':remaining>0?'Atualizar em '+Math.ceil(remaining/60000)+' min':'Atualizar esta peça';}},15000);
+setInterval(()=>{renderConnection();for(const button of $$('[data-action=scan]')){const id=Number(button.dataset.id),remaining=Date.parse(button.dataset.nextAt)-Date.now();button.disabled=state.busy.has(id)||button.dataset.enabled!=='true'||remaining>0;button.textContent=state.busy.has(id)?'Buscando nas lojas…':remaining>0?'Atualizar em '+Math.ceil(remaining/60000)+' min':'Atualizar esta peça';}},15000);
 setInterval(async()=>{if(state.session&&document.visibilityState==='visible'&&['offers','activity','sources','coupons','used'].includes(state.tab)){try{await reloadCatalog();if(state.tab==='coupons')await loadCoupons();if(state.tab==='sources')await loadSources();if(state.tab==='used')await loadUsed();}catch(error){notice(error.message);}}},60000);
 start();

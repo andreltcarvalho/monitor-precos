@@ -58,3 +58,9 @@ Barra de comparação com progresso e diálogo sob demanda; leitura e links de c
 Compartilhar a coleta pública entre botão e endpoint agendado; Supabase Cron/pg_net usa o Vault existente a cada hora, sem Vercel Cron nem JWT administrativo. Cache privado por conta, cooldown compartilhado com o botão, fontes independentes e resposta antiga não sobrescreve atualização manual. Ativação ML permanece no PC. Validar API, função SQL com fixtures revertidas, deploy e execução real antes de habilitar o cron.
 
 Rodada 8: 529 testes Python, dois testes JS e Chrome/ASGI aprovados. Migração aplicada pelo plugin Supabase; fixture SQL real confirmou cache, conta, timeout, atomicidade, leitura manual e cooldown, com 0 usuários de teste restantes. Habilitar e verificar coleta real após o deploy.
+
+## Rodada 9 — densidade e presença do coletor
+Reduzir espaços do catálogo preservando alinhamento dos preços, resumo do modelo em duas linhas com título completo nos detalhes; recolher grupos Telegram e mostrar contagem/estado. Atualizar a indicação de PC pelo relógio, mesmo sem resposta nova. Validar JS, Chrome/ASGI e capturas reais desktop.
+
+Rodada 8 publicada em 5bd987b. Endpoint real rejeitou chamada sem segredo (401). Cron Supabase habilitado e execução real salvou 67 cupons de outras lojas; Pelando/Pichau 403 registrados sem cancelar MC. Ativação ML não mudou.
+Rodada 9: JS e Chrome/ASGI aprovados, capturas com dados reais em 1440/1024 sem erro/overflow; Fontes agora cabe em uma tela com os nove grupos recolhidos.

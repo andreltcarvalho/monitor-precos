@@ -162,3 +162,8 @@ Consulta as leituras da peça e do período diretamente no Supabase, mantendo RL
 - Coleta na nuvem compartilhada pelo botão e pelo Supabase Cron; fontes independentes e cache por conta.
 - Agendamento privado reaproveita Vault, evita lotes duplicados e não sobrescreve uma leitura manual posterior.
 - Painel informa a execução automática sem misturar descoberta com ativação no Chrome.
+
+### 08/10/2026 — catálogo compacto e presença do PC
+- Cartões com título resumido, menor altura e preços alinhados; título completo nos detalhes.
+- Configuração dos grupos Telegram recolhida com contagem e estado da coleta.
+- Presença do PC expira pelo relógio sem depender de uma resposta nova; controles de sessão seguem o mesmo estado.

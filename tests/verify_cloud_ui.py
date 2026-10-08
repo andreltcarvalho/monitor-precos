@@ -99,6 +99,8 @@ async def main():
             await page.locator('#part-cancel').click()
             await page.locator('#navigation [data-tab="sources"]').click();await page.wait_for_function('document.querySelector("#shops-list").getAttribute("aria-busy")===null')
             assert not await page.get_by_text('-100123456789',exact=True).is_visible()
+            assert not await page.locator('[data-action="source-toggle"]').is_visible()
+            await page.locator('#telegram-section>summary').click()
             await page.locator('[data-action="source-toggle"]').click();await page.wait_for_function('document.querySelector("#telegram-list").innerText.includes("Alteração na fila")')
             assert 'Alteração na fila' in await page.locator('#telegram-list').inner_text()
             assert repo.queued[-1]['action']=='source_toggle'

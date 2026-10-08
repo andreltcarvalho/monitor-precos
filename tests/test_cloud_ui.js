@@ -101,3 +101,17 @@ assert.equal(run('offerRows(state.catalog.groups[0])[0].id'),'current');
 run("state.comparison=['old','current'];renderComparison()");
 assert.match(node('#comparison').innerHTML,/Sem confirmação atual/);
 console.log('Saved prices: expired coupon ranking and comparison warning passed.');
+
+// Clock passage must expire worker presence even without a new HTTP response.
+run(`state.catalog.status=[{name:'PC conectado',checked_at:new Date(Date.now()-60000).toISOString()}];renderConnection();`);
+assert.equal(node('#connection').textContent,'PC conectado');
+run(`state.catalog.status[0].checked_at=new Date(Date.now()-181000).toISOString();renderConnection();`);
+assert.equal(node('#connection').textContent,'PC sem sincronização');
+run(`state.catalog.status=[];renderConnection();`);
+assert.equal(node('#connection').textContent,'PC sem sincronização');
+console.log('Worker presence expires from the clock, not only a refresh.');
+
+assert.equal(run('age(new Date(Date.now()+20000).toISOString())'),'agora','Small server clock skew must not hide a fresh reading');
+assert.equal(run('age(new Date(Date.now()+600000).toISOString())'),'Horário não informado');
+run(`state.catalog.status=[{name:'PC conectado',checked_at:new Date(Date.now()+600000).toISOString()}];renderConnection();`);
+assert.equal(node('#connection').textContent,'PC sem sincronização');
