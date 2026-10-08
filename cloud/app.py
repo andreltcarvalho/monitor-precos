@@ -224,8 +224,9 @@ async def history(identifier: int, payment: str = 'effective', repo=Depends(repo
     if not part:
         raise HTTPException(404, 'Peça não encontrada.')
     offers = {o['id']: o for o in await values(repo, 'offers') if o['component_id'] == identifier}
-    rows = await values(repo, 'observations')
     today = datetime.now(timezone(timedelta(hours=-3))).date()
+    result = await repo.history(identifier, (today-timedelta(days=30)).isoformat())
+    rows = result['rows']
     daily = {}
     for row in rows:
         offer = offers.get(row.get('offer_id'))
@@ -247,7 +248,7 @@ async def history(identifier: int, payment: str = 'effective', repo=Depends(repo
     prices = list(daily.values())
     return {'points': [{'date': day, 'price': daily[day]} for day in sorted(daily)],
             'minimum': min(prices) if prices else None, 'median': int(median(prices)) if prices else None,
-            'payment': payment, 'truncated': len(rows) >= 10000}
+            'payment': payment, 'truncated': result['truncated']}
 
 
 @app.get('/api/sources')

@@ -45,3 +45,6 @@ Rodada 4 publicada em 9fff1d0: produção confirmou 66 cupons não ML apesar das
 
 ## Rodada 5 — edição e critérios
 Busca e remoção de marcas, campos inválidos com foco/mensagem acessível, critério de preço explícito e lista recolhida durante edição. Favoritas usam valor exibido e comparação identifica cupom antigo. Duas suítes JS e Chrome/ASGI aprovados; captura de formulário real sem erros JS/overflow. Apenas front end nesta rodada.
+
+## Rodada 6 — histórico sem baixar todas as peças
+RPC read-only `monitor_recent_observations` com SECURITY INVOKER, auth.uid(), RLS e execução anônima revogada. Consulta somente a peça/período, limitada a 10 mil leituras recentes com indicação de leitura parcial. Migração aplicada pelo plugin; teste SQL com 10.001 leituras, outra peça, data antiga e duas contas passou e foi revertido (0 fixtures restantes). EXPLAIN em dados reais: 13,685 ms, sem novo índice. 56 testes cloud e Chrome/ASGI aprovados. Comparar os pontos após publicar.

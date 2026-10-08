@@ -71,6 +71,10 @@ class Repository:
             data={'owner_id': self.owner, 'action': action, 'payload': payload}, prefer='return=representation')
         return rows[0]
 
+    async def history(self, component, since_day):
+        return await self.request('POST', 'rpc/monitor_recent_observations',
+                                  data={'component_key': str(component), 'since_day': since_day})
+
     async def commands(self):
         pending, history = await asyncio.gather(
             self.request('GET', 'monitor_commands', params={

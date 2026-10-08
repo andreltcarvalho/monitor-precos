@@ -150,3 +150,6 @@
 - Erros de campo com mensagem associada, destaque e foco, sem perder os valores.
 - Peças mostram teto e condição; busca, fabricantes e exclusão ficam em expansão. Listas vazias explicam filtros/teto e oferecem ação adequada.
 - Favoritas ordenadas pelo preço que o cartão realmente mostra; comparação avisa quando o cupom não tem confirmação atual.
+
+### Histórico cloud
+Consulta as leituras da peça e do período diretamente no Supabase, mantendo RLS e os cálculos de preço. Limite considera as leituras mais recentes e informa truncamento; não apaga histórico.

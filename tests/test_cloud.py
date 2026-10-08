@@ -44,6 +44,12 @@ class FakeRepository:
     async def delete(self, kind, key):
         self.data.pop((kind, str(key)), None)
 
+    async def history(self, component, since_day):
+        keys = {key for (kind, key), value in self.data.items() if kind == 'offers' and value['component_id'] == component}
+        rows = [value for (kind, _), value in self.data.items() if kind == 'observations'
+                and value.get('offer_id') in keys and (value.get('observed_at') or '')[:10] >= since_day]
+        return {'rows': rows, 'truncated': False}
+
     async def commands(self):
         return self.queued
 
@@ -420,6 +426,14 @@ class RepositoryTests(unittest.IsolatedAsyncioTestCase):
                 await repo.put_many([{'kind': 'status', 'record_key': 'pc', 'data': {}, 'owner_id': 'foreign'}])
         self.assertIn(b'"owner_id":"owner-a"', requests[-1].content)
         self.assertNotIn(b'foreign', requests[-1].content)
+
+    async def test_history_requests_only_selected_component_and_period(self):
+        with patch.dict(os.environ, SUPABASE_URL='https://test.supabase.co', SUPABASE_PUBLISHABLE_KEY='public-test'):
+            repo = Repository(None, 'session', 'owner-a')
+            repo.request = AsyncMock(return_value={'rows': [], 'truncated': False})
+            self.assertEqual(await repo.history(5, '2026-10-01'), {'rows': [], 'truncated': False})
+            self.assertEqual(repo.request.call_args.args, ('POST', 'rpc/monitor_recent_observations'))
+            self.assertEqual(repo.request.call_args.kwargs['data'], {'component_key': '5', 'since_day': '2026-10-01'})
 
     async def test_old_pending_commands_remain_visible_beside_recent_history(self):
         with patch.dict(os.environ, SUPABASE_URL='https://test.supabase.co', SUPABASE_PUBLISHABLE_KEY='public-test'):
