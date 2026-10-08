@@ -129,6 +129,22 @@ class CloudSync:
                     if field in row['data']:
                         store.set_offer_preference([identifier], field, bool(row['data'][field]))
 
+    def import_coupons(self, rows):
+        store = self.monitor.store
+        for key, official in [('pichau_coupons', True), ('public_coupons', False)]:
+            incoming = [row for row in rows if (row.get('source') == 'Pichau') == official
+                        and coupon_is_today(row.get('found_at'))]
+            if not incoming:
+                continue
+            merged = {}
+            for row in json.loads(store.get_setting(key) or '[]') + incoming:
+                if not coupon_is_today(row.get('found_at') or row.get('checked_at')):
+                    continue
+                identity = (row.get('source'), row.get('shop'), row.get('code'), row.get('url'))
+                if (row.get('checked_at') or '') >= (merged.get(identity, {}).get('checked_at') or ''):
+                    merged[identity] = row
+            store.set_setting(key, json.dumps(list(merged.values()), ensure_ascii=False))
+
     async def import_offers(self, rows):
         store = self.monitor.store
         parts = {part['id'] for part in store.components()}
@@ -213,6 +229,7 @@ class CloudSync:
                 await self.push(client, credentials)
                 result = await self.request(client, credentials, 'POST', '/api/worker/pull', {})
                 self.apply_overrides(result['overrides'], result['preferences'])
+                self.import_coupons(result.get('coupon_feed', []))
                 await self.import_offers(result['offers'])
                 result = await self.request(client, credentials, 'POST', '/api/worker/claim', {})
                 for command in result['commands']:

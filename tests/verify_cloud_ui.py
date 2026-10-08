@@ -26,6 +26,7 @@ async def main():
     repo.data['coupon_applications','RECUPERAR']={'code':'RECUPERAR','status':'pending','detail':'Tivemos um problema','found_at':utcnow(),'attempts':1,'source':'Teste'}
     repo.data['coupon_applications','ATIVADO']={'code':'ATIVADO','status':'inserted','detail':'Adicionado','found_at':utcnow(),'attempts':1,'source':'Teste'}
     repo.data['settings','public_coupons']={'value':json.dumps([{'code':'NOVOCODIGO','shop':'Mercado Livre','source':'Pelando','conditions':'Informática','activation':False,'found_at':utcnow(),'checked_at':utcnow(),'url':'https://www.mercadolivre.com.br/cupons','source_url':'https://www.pelando.com.br/cupons-de-descontos/mercado-livre'}])}
+    repo.data['sources','1']={'id':1,'name':'Grupo teste','reference':'-100123456789','enabled':1}
     repo.data['status','worker']={'name':'PC conectado','checked_at':utcnow(),'sessions':{'Mercado Livre':{'configured':True,'login_open':False,'detail':'Perfil salvo'}}}
     app.dependency_overrides[repository]=lambda:repo
     errors=[];requests=[]
@@ -43,6 +44,8 @@ async def main():
             page=await context.new_page();page.on('pageerror',lambda error:errors.append(str(error)))
             await page.goto('https://monitor.test/');await page.locator('.offer-card').first.wait_for()
             assert await page.locator('.offer-card').count()==6
+            tops=await page.locator('.offer-card .offer-price').evaluate_all('(nodes)=>nodes.slice(0,3).map(node=>Math.round(node.getBoundingClientRect().top))')
+            assert len(set(tops))==1,tops
             await page.get_by_role('button',name='Próxima página de Placa').click()
             assert '7–8 de 8' in await page.locator('#offer-groups .pagination').inner_text()
             await page.locator('#offer-search').fill('Modelo 0');assert await page.locator('.offer-card').count()==1
@@ -74,6 +77,10 @@ async def main():
             assert 'Nenhuma oferta' in await page.locator('#offer-groups').inner_text()
             await page.go_back();assert await page.locator('#parts').is_visible()
             await page.locator('#navigation [data-tab="sources"]').click();await page.wait_for_function('document.querySelector("#shops-list").getAttribute("aria-busy")===null')
+            assert not await page.get_by_text('-100123456789',exact=True).is_visible()
+            await page.locator('[data-action="source-toggle"]').click();await page.wait_for_function('document.querySelector("#telegram-list").innerText.includes("Alteração na fila")')
+            assert 'Alteração na fila' in await page.locator('#telegram-list').inner_text()
+            assert repo.queued[-1]['action']=='source_toggle'
             session=page.locator('.session-controls[data-shop="Mercado Livre"]');await session.locator('summary').click();await session.locator('[data-action="session-open"]').click();await page.wait_for_function('document.querySelector("[data-action=session-open]").disabled');assert repo.queued[-1]['action']=='session_open'
             for i in range(30):
                 repo.data['coupon_applications','CODIGO'+str(i)]={'code':'CODIGO'+str(i),'status':'inserted','detail':'Ativado','found_at':utcnow(),'source':'Teste'}

@@ -37,3 +37,6 @@ Rodada 2 validada: 50 testes cloud + JS + Chrome/ASGI aprovados; controles de se
 Cupons com paginação e ações pertinentes à loja selecionada; atividade separa pendências do histórico. Testar região única gru1 (São Paulo) e conferir leituras reais antes de atribuir melhora. Sem proxies nem alterações de sessões.
 
 Rodada 3: 51 testes cloud, duas suítes JS e Chrome/ASGI aprovados. Cupons paginados, filtros por loja sem ações impróprias, fila antiga preservada e renovação única de sessão. Capturas reais em 1440/1024 sem erro JS/overflow. /health confirma gru1; a mudança de região não resolveu o 403 de Pichau/Terabyte, KaBuM continua com leituras.
+
+## Rodada 4 — recuperação e cupons públicos
+Cartões alinhados e grupos com configuração recolhida. Busca pública com fontes/timeout independentes, cache exclusivo da nuvem e importação pela ponte para o aplicador; sem nova infraestrutura. Pedidos antigos em execução não podem bloquear lotes futuros indefinidamente; encerramento quando o PC pede o próximo lote, sem reenvio. Suíte completa de 523 testes aprovada antes da proteção final da fila; executar a regressão específica e validar publicação/ponte.

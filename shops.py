@@ -594,14 +594,20 @@ class Shops:
                 result.append(dict(code=candidates[-1], conditions=text, url=urljoin('https://www.pichau.com.br', anchor['href'])))
         return result
 
+    async def public_coupon_source(self, name: str) -> list[dict]:
+        sources = {'Melhores Cartões': (PUBLIC_COUPONS_URL, public_coupons),
+                   'Pelando': (PELANDO_COUPONS_URL, pelando_coupons)}
+        url, parser = sources[name]
+        response = await self.client.get(url)
+        response.raise_for_status()
+        if len(response.content) > 6_000_000:
+            raise ValueError('Fonte pública de cupons acima do limite de leitura.')
+        return parser(response.text)
+
     async def public_coupon_list(self) -> list[dict]:
         result = []
-        for url, parser in ((PUBLIC_COUPONS_URL, public_coupons), (PELANDO_COUPONS_URL, pelando_coupons)):
-            response = await self.client.get(url)
-            response.raise_for_status()
-            if len(response.content) > 6_000_000:
-                raise ValueError('Fonte pública de cupons acima do limite de leitura.')
-            result.extend(parser(response.text))
+        for name in ('Melhores Cartões', 'Pelando'):
+            result.extend(await self.public_coupon_source(name))
         return result
 
     async def close(self):

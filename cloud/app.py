@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from cloud.repository import Repository, configuration, user_session
-from cloud.collection import collect_shop, check_offer, ScheduledReadings
+from cloud.collection import collect_shop, check_offer, failure_reason, ScheduledReadings
 from cloud_protocol import CLOUD_SHOPS, LOCAL_SHOPS, PUBLIC_SETTINGS, SYNC_KINDS, catalog, offer_key
 from core import BRAND_ALIASES, canonical_url, confirmed_price, coupon_is_today, detect_brand, effective_price, matches, offer_matches, price_is_current, reading_valid_until, top_offers, tracking_price, utcnow, valid_url
 from forms import component_input_errors
@@ -278,8 +278,11 @@ async def get_coupons(repo=Depends(repository)):
     settings = {row['record_key']: row['data'].get('value', '[]') for row in setting_rows}
     disabled = {row['data']['code']: row['data']['disabled'] for row in override_rows
                 if row['record_key'].startswith('coupon-disabled:') and coupon_is_today(row['data'].get('found_at'))}
-    public = [item for item in json.loads(settings.get('public_coupons', '[]')) if coupon_is_today(item.get('found_at') or item.get('checked_at'))]
-    pichau = [item for item in json.loads(settings.get('pichau_coupons', '[]')) if coupon_is_today(item.get('found_at') or item.get('checked_at'))]
+    feed = json.loads(settings.get('cloud_coupon_feed', '[]'))
+    public = [item for item in json.loads(settings.get('public_coupons', '[]')) + [item for item in feed if item.get('source') != 'Pichau'] if coupon_is_today(item.get('found_at') or item.get('checked_at'))]
+    pichau = [item for item in json.loads(settings.get('pichau_coupons', '[]')) + [item for item in feed if item.get('source') == 'Pichau'] if coupon_is_today(item.get('found_at') or item.get('checked_at'))]
+    public.sort(key=lambda item: item.get('checked_at') or '', reverse=True)
+    pichau.sort(key=lambda item: item.get('checked_at') or '', reverse=True)
     coupons = [dict(item, code=code.strip()) for item in coupon_catalog(posts, pichau, public)
                for code in (item['codes'].split(',') if item['codes'] else [''])]
     applications = {row['code']: dict(row, disabled=disabled.get(row['code'], row.get('disabled', False)))
@@ -303,30 +306,41 @@ async def get_coupons(repo=Depends(repository)):
             continue
         coupons.append({'code': row['code'], 'shop': 'Mercado Livre', 'source': row.get('source'),
                         'stamp': row.get('found_at'), 'conditions': '', 'url': ''})
-    return {'coupons': coupons, 'applications': ml}
+    status = [row for row in await values(repo, 'status') if row.get('coupon_source')]
+    return {'coupons': coupons, 'applications': ml, 'collection_status': status}
 
 
 @app.post('/api/coupons/refresh')
 async def refresh_coupons(repo=Depends(repository)):
+    if not await repo.request('POST', 'rpc/monitor_claim_scan', data={'component_key': 'coupons'}):
+        raise HTTPException(429, 'Os cupons públicos foram consultados há menos de cinco minutos. Aguarde para atualizar.')
+    old = await repo.get('settings', 'cloud_coupon_feed') or {'value': '[]'}
+    previous = json.loads(old['value'])
     collectors = Shops()
-    statuses = []
+    async def collect(name):
+        cached = [item for item in previous if item.get('source') == name]
+        try:
+            async with asyncio.timeout(30):
+                items = await collectors.coupon_list() if name == 'Pichau' else await collectors.public_coupon_source(name)
+            for item in items:
+                prior = next((row for row in cached if row.get('code') == item.get('code') and row.get('url') == item.get('url')), {})
+                item.update(source=name, shop=item.get('shop') or name,
+                            found_at=item.get('found_at') or prior.get('found_at') or utcnow(), checked_at=utcnow())
+            status = {'source': name, 'count': len(items), 'failures': 0, 'detail': f'{len(items)} cupons consultados.'}
+        except (httpx.HTTPError, ValueError, TimeoutError) as error:
+            items = cached
+            status = {'source': name, 'count': 0, 'failures': 1,
+                      'detail': failure_reason(error) + ' Última leitura preservada.'}
+        status.update(coupon_source=True, checked_at=utcnow())
+        await repo.put('status', 'cloud:coupons:' + name, status)
+        return items, status
     try:
-        for name, method in [('pichau_coupons', collectors.coupon_list), ('public_coupons', collectors.public_coupon_list)]:
-            try:
-                items = await method()
-                old = await repo.get('settings', name) or {'value': '[]'}
-                previous = {str(item.get('code')) + str(item.get('url')): item for item in json.loads(old['value'])}
-                for item in items:
-                    prior = previous.get(str(item.get('code')) + str(item.get('url')), {})
-                    item['found_at'] = item.get('found_at') or prior.get('found_at') or utcnow()
-                    item['checked_at'] = utcnow()
-                await repo.put('settings', name, {'value': json.dumps(items, ensure_ascii=False)})
-                statuses.append({'source': name, 'detail': f'{len(items)} cupons consultados.'})
-            except (httpx.HTTPError, ValueError):
-                statuses.append({'source': name, 'detail': 'Consulta bloqueada ou indisponível; última leitura preservada.'})
+        results = await asyncio.gather(*(collect(name) for name in ('Pichau', 'Melhores Cartões', 'Pelando')))
+        items = [item for rows, _ in results for item in rows if coupon_is_today(item.get('found_at'))]
+        await repo.put('settings', 'cloud_coupon_feed', {'value': json.dumps(items, ensure_ascii=False)})
+        return {'status': [status for _, status in results]}
     finally:
         await collectors.close()
-    return {'status': statuses}
 
 
 @app.post('/api/scan/{identifier}')
@@ -447,12 +461,19 @@ async def cancel_command(identifier: uuid.UUID, repo=Depends(repository)):
 
 @app.post('/api/worker/pull')
 async def pull(repo=Depends(repository)):
-    return {'overrides': await repo.records('overrides'), 'preferences': await repo.records('preferences'),
-            'offers': await repo.records('offers')}
+    overrides, preferences, offers, coupons = await asyncio.gather(
+        repo.records('overrides'), repo.records('preferences'), repo.records('offers'), repo.get('settings', 'cloud_coupon_feed'))
+    return {'overrides': overrides, 'preferences': preferences, 'offers': offers,
+            'coupon_feed': json.loads(coupons['value']) if coupons else []}
 
 
 @app.post('/api/worker/claim')
 async def claim(repo=Depends(repository)):
+    # O coletor pede o próximo lote depois de terminar o anterior. Não reenviar ações antigas.
+    cutoff = (datetime.now(timezone.utc)-timedelta(hours=1)).isoformat()
+    await repo.request('PATCH', 'monitor_commands', params={
+        'owner_id': 'eq.' + repo.owner, 'status': 'eq.running', 'updated_at': 'lt.' + cutoff},
+        data={'status': 'failed', 'detail': 'Sem confirmação há mais de uma hora. Confira o resultado antes de enviar novamente.', 'updated_at': utcnow()})
     return {'commands': await repo.request('POST', 'rpc/monitor_claim_commands', data={})}
 
 

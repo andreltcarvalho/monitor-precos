@@ -1,4 +1,5 @@
 import asyncio
+import json
 from datetime import datetime, timedelta, timezone
 import os
 from pathlib import Path
@@ -284,6 +285,57 @@ class ApiTests(unittest.TestCase):
         next_at=self.client.get('/api/catalog').json()['scan_next_at']['1']
         self.assertEqual(datetime.fromisoformat(next_at)-datetime.fromisoformat(stamp),timedelta(minutes=5))
 
+    def test_public_coupon_failure_does_not_stop_other_sources_or_erase_cache(self):
+        import json
+        old={'code':'ANTERIORMC','shop':'KaBuM','source':'Melhores Cartões','conditions':'Informática',
+             'url':'https://www.kabum.com.br','source_url':'https://www.melhorescartoes.com.br',
+             'activation':False,'found_at':utcnow(),'checked_at':utcnow()}
+        self.repo.data['settings','cloud_coupon_feed']={'value':json.dumps([old])}
+        self.repo.request=AsyncMock(return_value=True)
+        new=dict(old,code='NOVOPEL',shop='Mercado Livre',source='Pelando',url='https://www.mercadolivre.com.br/cupons')
+        async def read(name):
+            if name=='Melhores Cartões':raise ValueError('Fonte indisponível')
+            return [new]
+        collectors=SimpleNamespace(coupon_list=AsyncMock(return_value=[]),
+            public_coupon_source=AsyncMock(side_effect=read),close=AsyncMock())
+        with patch('cloud.app.Shops',return_value=collectors):
+            response=self.client.post('/api/coupons/refresh',json={})
+        self.assertEqual(response.status_code,200)
+        statuses={row['source']:row for row in response.json()['status']}
+        self.assertEqual(statuses['Melhores Cartões']['failures'],1)
+        self.assertEqual(statuses['Pelando']['count'],1)
+        saved=json.loads(self.repo.data['settings','cloud_coupon_feed']['value'])
+        self.assertEqual({row['code'] for row in saved},{'ANTERIORMC','NOVOPEL'})
+        pulled=self.client.post('/api/worker/pull',json={}).json()['coupon_feed']
+        self.assertEqual(pulled,saved)
+        shown=self.client.get('/api/coupons').json()
+        self.assertIn('NOVOPEL',[row['code'] for row in shown['coupons']])
+        self.assertEqual(len(shown['collection_status']),3)
+        self.assertFalse(self.repo.queued)
+        collectors.close.assert_awaited_once()
+
+    def test_idle_worker_expires_only_old_running_commands_without_resubmitting(self):
+        self.repo.request=AsyncMock(side_effect=[None,[]])
+        response=self.client.post('/api/worker/claim',json={})
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.json()['commands'],[])
+        cleanup,claim=self.repo.request.call_args_list
+        self.assertEqual(cleanup.args,('PATCH','monitor_commands'))
+        params=cleanup.kwargs['params']
+        self.assertEqual(params['owner_id'],'eq.owner-a')
+        self.assertEqual(params['status'],'eq.running')
+        cutoff=datetime.fromisoformat(params['updated_at'][3:])
+        self.assertAlmostEqual((datetime.now(timezone.utc)-cutoff).total_seconds(),3600,delta=5)
+        self.assertEqual(cleanup.kwargs['data']['status'],'failed')
+        self.assertEqual(claim.args,('POST','rpc/monitor_claim_commands'))
+        self.assertFalse(self.repo.queued)
+
+    def test_public_coupon_refresh_respects_cooldown_without_http_calls(self):
+        self.repo.request=AsyncMock(return_value=False)
+        with patch('cloud.app.Shops') as collectors:
+            self.assertEqual(self.client.post('/api/coupons/refresh',json={}).status_code,429)
+        collectors.assert_not_called()
+
     def test_duplicate_coupon_sources_keep_one_saved_application_state(self):
         import json
         coupon = {'code': 'SITETODO', 'shop': 'Mercado Livre', 'source': 'Pelando',
@@ -427,6 +479,23 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
         async with self.monitor.shop_lock:
             with self.assertRaises(ValueError):
                 await self.bridge.execute({'action':'session_open','payload':{'shop':'Mercado Livre'}})
+
+    async def test_cloud_coupon_feed_reaches_local_applicator_without_reapplying_success(self):
+        from ml_coupon_applicator import CouponApplicator
+        from unittest.mock import MagicMock
+        self.monitor.ml_coupons=CouponApplicator(self.store,MagicMock(),self.monitor.shop_lock)
+        self.monitor.ml_coupons.record('ATIVADO','Pelando','inserted','Cupom adicionado')
+        rows=[dict(code=code,shop='Mercado Livre',source='Pelando',conditions='Todo site',activation=False,
+                   source_url='https://www.pelando.com.br/d/cupom',url='https://www.mercadolivre.com.br/cupons',
+                   found_at=utcnow(),checked_at=utcnow()) for code in ['ATIVADO','NOVO']]
+        self.bridge.import_coupons(rows)
+        self.bridge.import_coupons(rows)
+        self.assertEqual(len(json.loads(self.store.get_setting('public_coupons'))),2)
+        self.assertEqual([row[0] for row in self.monitor.ml_coupons.candidates()],['NOVO'])
+        self.assertEqual(next(row for row in self.monitor.ml_coupons.catalog() if row['code']=='ATIVADO')['status'],'inserted')
+        old=dict(rows[1],code='ONTEM',found_at=(datetime.now(timezone.utc)-timedelta(days=2)).isoformat())
+        self.bridge.import_coupons([old])
+        self.assertNotIn('ONTEM',[row['code'] for row in self.monitor.ml_coupons.catalog()])
 
     async def test_coupon_cloud_preference_applies_only_today(self):
         calls=[]

@@ -138,3 +138,9 @@
 - Atividade separa pendências do histórico paginado; consultas da fila preservam pedidos antigos pendentes além dos últimos 50 finalizados.
 - Renovação de sessão compartilhada entre consultas concorrentes.
 - Região Vercel gru1 confirmada em produção; KaBuM continua retornando leituras, Pichau/Terabyte seguem com HTTP 403.
+
+### UX — cartões, grupos e recuperação de cupons
+- Preços alinhados em cada linha de cartões; nomes completos do vendedor continuam acessíveis.
+- Referências técnicas e exclusão dos grupos recolhidas; alteração pendente impede envio repetido.
+- Fontes públicas de cupons consultadas independentemente na nuvem, com timeout/cooldown e último resultado preservado por fonte. Códigos sincronizados para o aplicador sem reaplicar ativados.
+- Ao pedir o próximo lote, o PC encerra pedidos em execução sem confirmação há mais de uma hora, sem reenvio automático.
