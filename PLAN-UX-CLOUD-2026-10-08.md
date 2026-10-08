@@ -40,3 +40,8 @@ Rodada 3: 51 testes cloud, duas suítes JS e Chrome/ASGI aprovados. Cupons pagin
 
 ## Rodada 4 — recuperação e cupons públicos
 Cartões alinhados e grupos com configuração recolhida. Busca pública com fontes/timeout independentes, cache exclusivo da nuvem e importação pela ponte para o aplicador; sem nova infraestrutura. Pedidos antigos em execução não podem bloquear lotes futuros indefinidamente; encerramento quando o PC pede o próximo lote, sem reenvio. Suíte completa de 523 testes aprovada antes da proteção final da fila; executar a regressão específica e validar publicação/ponte.
+
+Rodada 4 publicada em 9fff1d0: produção confirmou 66 cupons não ML apesar das outras duas fontes com 403; ponte reiniciada com /health 200/running; pedidos em execução desde ontem encerrados sem reenvio.
+
+## Rodada 5 — edição e critérios
+Busca e remoção de marcas, campos inválidos com foco/mensagem acessível, critério de preço explícito e lista recolhida durante edição. Favoritas usam valor exibido e comparação identifica cupom antigo. Duas suítes JS e Chrome/ASGI aprovados; captura de formulário real sem erros JS/overflow. Apenas front end nesta rodada.

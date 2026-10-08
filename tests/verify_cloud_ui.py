@@ -69,13 +69,27 @@ async def main():
             await page.wait_for_function('document.querySelector("#coupons-list").innerText.includes("Nenhum cupom")');await page.locator('[data-action="coupon-filter"][data-state="failed"]').click()
             assert not repo.queued,'Desativar/reativar não depende do PC'
             await page.locator('#coupon-retry').click();await page.wait_for_function('!document.querySelector("#coupon-retry").hasAttribute("aria-busy")');assert await page.locator('#coupon-retry').is_disabled()
-            await page.locator('#navigation [data-tab="parts"]').click();await page.locator('[data-action="edit-part"]').click()
+            await page.locator('#navigation [data-tab="parts"]').click();await page.locator('#parts [data-action="edit-part"]').click()
+            await page.locator('#brand-summary').click();await page.locator('#brand-search').fill('Asus')
+            assert await page.locator('#brands label:visible').count()==1
+            await page.locator('#brands input[value="ASUS"]').check()
+            assert await page.locator('[data-action="remove-brand"]').count()==1
+            await page.locator('#part-form [name="target_text"]').fill('1.950x');await page.locator('#part-save').click()
+            await page.wait_for_function('document.querySelector("[name=target_text]").getAttribute("aria-invalid")==="true"')
+            assert await page.locator('[name="target_text"]').evaluate('(el)=>el===document.activeElement')
+            assert await page.locator('[name="target_text"]').input_value()=='1.950x'
             await page.locator('#part-form [name="target_text"]').fill('1.950,00');await page.locator('#part-save').click()
             await page.wait_for_function('document.querySelector("#part-form").hidden')
             await page.locator('#navigation [data-tab="offers"]').click();await page.locator('[data-selection=""]').click()
             assert await page.locator('.offer-card').count()==0
             assert 'Nenhuma oferta' in await page.locator('#offer-groups').inner_text()
+            assert '1.950,00 no Pix' in await page.locator('#offer-groups').inner_text()
+            assert await page.get_by_role('button',name='Revisar critérios da peça').is_visible()
             await page.go_back();assert await page.locator('#parts').is_visible()
+            await page.locator('#parts [data-action="edit-part"]').click()
+            assert 'ASUS' in await page.locator('#brand-selected').inner_text()
+            await page.locator('[data-action="remove-brand"]').click();assert await page.locator('#brand-selected').is_hidden()
+            await page.locator('#part-cancel').click()
             await page.locator('#navigation [data-tab="sources"]').click();await page.wait_for_function('document.querySelector("#shops-list").getAttribute("aria-busy")===null')
             assert not await page.get_by_text('-100123456789',exact=True).is_visible()
             await page.locator('[data-action="source-toggle"]').click();await page.wait_for_function('document.querySelector("#telegram-list").innerText.includes("Alteração na fila")')

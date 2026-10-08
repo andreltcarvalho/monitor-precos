@@ -37,7 +37,7 @@ async function start() {
   try {
     state.session=await api('/api/session');$('#boot').hidden=true;$('#login').hidden=true;$('#workspace').hidden=false;
     $('#brands').innerHTML=state.session.brands.map(brand=>`<label><input type="checkbox" name="brand" value="${escapeHtml(brand)}">${escapeHtml(brand)}</label>`).join('');
-    $('#panel-url').value=location.origin;
+    $('#panel-url').value=location.origin;brandChoices();
     loading('offer-groups');await reloadCatalog();$('#offer-groups').removeAttribute('aria-busy');await showTab(location.hash.slice(1)||'offers',false);
   } catch(error) {if(!state.session){signedOut();$('#login-message').textContent=error.message;}else loadError('offer-groups',error);}
 }
@@ -97,13 +97,15 @@ function card(row) {
 function offerRows(group) {
   const selection=$('#offer-selection').value;
   const rows=selection?[...state.offers.values()].filter(row=>row.component_id===group.id&&row[selection]):group.offers;
-  return rows.filter(filtered).sort((a,b)=>(a.effective??a.coupon_price??a.pix??a.card??a.announced??Infinity)-(b.effective??b.coupon_price??b.pix??b.card??b.announced??Infinity)).slice(0,12);
+  return rows.filter(filtered).sort((a,b)=>(a.effective??offerPrice(a).amount??Infinity)-(b.effective??offerPrice(b).amount??Infinity)).slice(0,12);
 }
 function renderOffers() {
   if(!state.catalog)return;
   const focused=document.activeElement?.closest('[data-action]');
   const focus=focused&&{action:focused.dataset.action,id:focused.dataset.id};
   const selection=$('#offer-selection').value;let count=0;
+  $('#selection-context').hidden=!selection;
+  $('#selection-context').textContent=selection==='favorite'?'Favoritas continuam salvas acima do limite ou com preço antigo. Confira a condição antes de comprar.':'Ofertas ocultadas ficam aqui para você restaurar; podem estar acima do limite ou desatualizadas.';
   const groups=state.catalog.groups.filter(g=>!$('#offer-part').value||String(g.id)===$('#offer-part').value);
   $('#piece-picker').innerHTML=`<button data-action="select-piece" data-id="" aria-pressed="${!$('#offer-part').value}"><strong>Todas as peças</strong><span>${state.catalog.groups.length} acompanhadas</span></button>`+state.catalog.groups.map(group=>`<button data-action="select-piece" data-id="${group.id}" aria-pressed="${String(group.id)===$('#offer-part').value}"><strong>${escapeHtml(group.name)}</strong><span>${group.offers.length?'A partir de '+currency(offerPrice(group.offers[0]).amount):'Sem ofertas'}</span></button>`).join('');
   $$('.selection-tabs button').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.selection===selection)));
@@ -116,7 +118,10 @@ function renderOffers() {
     const heading=`<div><h3 tabindex="-1" id="piece-${group.id}">${escapeHtml(group.name)}</h3><p>${rows.length} ${rows.length===1?'oferta':'ofertas'}${escapeHtml(limit)}</p></div>`;
     const nextAt=state.catalog.scan_next_at?.[String(group.id)],cooldown=Date.parse(nextAt)>Date.now();
     const scan=`<button class="secondary" data-action="scan" data-id="${group.id}" data-next-at="${escapeHtml(nextAt||'')}" data-enabled="${!!group.enabled}" aria-label="Buscar ofertas de ${escapeHtml(group.name)}" ${state.busy.has(group.id)||!group.enabled||cooldown?'disabled':''} title="${cooldown?'Próxima atualização manual: '+time(nextAt):'Busca novas ofertas nas lojas ativas desta peça'}">${state.busy.has(group.id)?'Buscando nas lojas…':cooldown?'Atualizar em '+Math.ceil((Date.parse(nextAt)-Date.now())/60000)+' min':'Atualizar esta peça'}</button>`;
-    const content=rows.length?`<div class="offer-grid">${rows.slice(page*6,page*6+6).map(card).join('')}</div><div class="pagination"><span>${page*6+1}–${Math.min(page*6+6,rows.length)} de ${rows.length} ofertas · até 12 por peça</span>${rows.length>6?`<div class="actions"><button class="secondary" data-action="offer-page" data-id="${group.id}" data-page="${page-1}" ${page===0?'disabled':''} aria-label="Página anterior de ${escapeHtml(group.name)}">Anterior</button><button class="secondary" data-action="offer-page" data-id="${group.id}" data-page="${page+1}" ${page*6+6>=rows.length?'disabled':''} aria-label="Próxima página de ${escapeHtml(group.name)}">Próxima</button></div>`:''}</div>`:`<div class="empty"><strong>${selection?'Nenhuma oferta nesta seleção':'Nenhuma oferta disponível nos filtros'}</strong><p>${selection==='favorite'?'Use a estrela para salvar ofertas que quiser acompanhar.':selection==='hidden'?'Ofertas ocultadas aparecem aqui para você restaurá-las.':'Altere os filtros ou busque novas ofertas desta peça.'}</p></div>`;
+    const narrowed=$('#offer-search').value.trim()||$('#offer-shop').value;
+    const emptyText=selection==='favorite'?'Use a estrela para salvar ofertas que quiser acompanhar.':selection==='hidden'?'Ofertas ocultadas aparecem aqui para você restaurá-las.':narrowed?'Nenhuma oferta desta peça corresponde à busca ou à loja selecionada.':group.target!=null?'Ainda não há preço confirmado até '+currency(group.target)+' '+(group.target_payment==='pix'?'no Pix.':'no total do cartão.'):'Nenhuma oferta com preço atual passou pelos critérios desta peça.';
+    const emptyAction=selection?'':narrowed?'<button class="secondary" data-action="clear-offer-filters">Limpar filtros</button>':`<div class="actions"><button class="secondary" data-action="edit-part" data-id="${group.id}">Revisar critérios da peça</button><button class="text" data-action="open-sources">Ver fontes</button></div>`;
+    const content=rows.length?`<div class="offer-grid">${rows.slice(page*6,page*6+6).map(card).join('')}</div><div class="pagination"><span>${page*6+1}–${Math.min(page*6+6,rows.length)} de ${rows.length} ofertas · até 12 por peça</span>${rows.length>6?`<div class="actions"><button class="secondary" data-action="offer-page" data-id="${group.id}" data-page="${page-1}" ${page===0?'disabled':''} aria-label="Página anterior de ${escapeHtml(group.name)}">Anterior</button><button class="secondary" data-action="offer-page" data-id="${group.id}" data-page="${page+1}" ${page*6+6>=rows.length?'disabled':''} aria-label="Próxima página de ${escapeHtml(group.name)}">Próxima</button></div>`:''}</div>`:`<div class="empty"><strong>${selection?'Nenhuma oferta nesta seleção':'Nenhuma oferta disponível nos filtros'}</strong><p>${escapeHtml(emptyText)}</p>${emptyAction}</div>`;
     return groups.length>1?`<details class="group" data-group="${group.id}" ${group.id===state.activeGroup?'open':''}><summary>${escapeHtml(group.name)} · ${rows.length} ofertas</summary><div class="group-heading">${heading}<div class="actions"><button class="text" data-action="piece-history" data-id="${group.id}">Histórico</button>${scan}</div></div>${content}</details>`:`<section class="group" aria-label="${escapeHtml(group.name)}"><div class="group-heading">${heading}<div class="actions"><button class="text" data-action="piece-history" data-id="${group.id}">Histórico</button>${scan}</div></div>${content}</section>`;
   }).join('')||'<div class="empty"><strong>Comece pelas peças que você quer comprar</strong><p>Cadastre uma peça ou conecte o PC para importar suas buscas.</p><button data-action="add-first-part">Adicionar peça</button></div>';
   $('#catalog-meta').textContent=`${count} ${count===1?'oferta':'ofertas'} na seleção`+(state.catalog.record_limit_reached?' · leitura parcial':'');
@@ -128,19 +133,46 @@ function renderComparison() {
   $('#comparison').hidden=!rows.length;
   if(!rows.length)return;
   const open=$('#comparison details')?.open;
-  $('#comparison').innerHTML=`<details class="comparison-panel" ${open?'open':''}><summary>Comparar ${rows.length} de 3 ofertas ${rows.length===1?'· selecione outra oferta da mesma peça':''}</summary><div class="section-heading"><h3>${escapeHtml(state.catalog.components.find(p=>p.id===rows[0].component_id)?.name||'Comparação')}</h3><button class="text" data-action="clear-comparison">Limpar comparação</button></div><div class="table-scroll"><table><thead><tr><th>Condição</th>${rows.map(r=>`<th>${escapeHtml(r.display?.title||r.title)}<br>${escapeHtml(r.shop)}</th>`).join('')}</tr></thead><tbody>${[['Pix','pix'],['Total no cartão','card'],['Preço anunciado','announced'],['Com cupom','coupon_price']].map(([title,key])=>`<tr><th>${title}</th>${rows.map(r=>`<td>${currency(r[key])}</td>`).join('')}</tr>`).join('')}<tr><th>Frete</th>${rows.map(()=>'<td>Não consultado</td>').join('')}</tr></tbody></table></div></details>`;
+  $('#comparison').innerHTML=`<details class="comparison-panel" ${open?'open':''}><summary>Comparar ${rows.length} de 3 ofertas ${rows.length===1?'· selecione outra oferta da mesma peça':''}</summary><div class="section-heading"><h3>${escapeHtml(state.catalog.components.find(p=>p.id===rows[0].component_id)?.name||'Comparação')}</h3><button class="text" data-action="clear-comparison">Limpar comparação</button></div><div class="table-scroll"><table><thead><tr><th>Condição</th>${rows.map(r=>`<th>${escapeHtml(r.display?.title||r.title)}<br>${escapeHtml(r.shop)}</th>`).join('')}</tr></thead><tbody>${[['Pix','pix'],['Total no cartão','card'],['Preço anunciado','announced'],['Com cupom','coupon_price']].map(([title,key])=>`<tr><th>${title}</th>${rows.map(r=>`<td>${currency(r[key])}${key==='coupon_price'&&r[key]!=null&&!(r.valid_until&&Date.parse(r.valid_until)>Date.now())?'<small class="comparison-note">Sem confirmação atual</small>':''}</td>`).join('')}</tr>`).join('')}<tr><th>Frete</th>${rows.map(()=>'<td>Não consultado</td>').join('')}</tr></tbody></table></div></details>`;
 }
 function renderParts() {
-  $('#parts-list').innerHTML=state.catalog.components.map(part=>{const brands=typeof part.ignored_brands==='string'?JSON.parse(part.ignored_brands):part.ignored_brands||[];return `<div class="row"><div class="copy"><h3>${escapeHtml(part.name)}</h3><p>Busca: ${escapeHtml(part.query)}</p><p class="muted">${part.enabled?'Monitorando':'Pausada'}${part.target!=null?' · Até '+currency(part.target):' · Sem preço máximo'}${brands.length?' · Ignorar '+escapeHtml(brands.join(', ')):''}</p></div><div class="row-actions"><button class="secondary" data-action="edit-part" data-id="${part.id}">Editar</button><button class="text danger" data-action="delete-part" data-id="${part.id}">Excluir</button></div></div>`;}).join('')||empty('Adicione sua primeira peça','Cadastre o que quer comprar para acompanhar as ofertas.');
+  const open=new Set($$('#parts-list details[open]').map(node=>node.dataset.id));
+  $('#parts-list').innerHTML=state.catalog.components.map(part=>{
+    const brands=typeof part.ignored_brands==='string'?JSON.parse(part.ignored_brands):part.ignored_brands||[];
+    const limit=part.target!=null?'Até '+currency(part.target)+' '+(part.target_payment==='card'?'no total do cartão':'no Pix'):'Sem preço máximo';
+    return `<div class="row"><div class="copy"><h3>${escapeHtml(part.name)}</h3><p class="muted">${part.enabled?'Monitorando':'Pausada'} · ${escapeHtml(limit)}</p><details class="part-criteria" data-id="${part.id}" ${open.has(String(part.id))?'open':''}><summary>Busca${brands.length?' e '+brands.length+' marcas ignoradas':' e critérios'}</summary><p>Buscar por: ${escapeHtml(part.query)}</p>${brands.length?`<p>Ignorar: ${escapeHtml(brands.join(', '))}</p>`:''}<button class="text danger" data-action="delete-part" data-id="${part.id}">Excluir peça</button></details></div><button class="secondary" data-action="edit-part" data-id="${part.id}" aria-label="Editar ${escapeHtml(part.name)}">Editar</button></div>`;
+  }).join('')||empty('Adicione sua primeira peça','Cadastre o que quer comprar para acompanhar as ofertas.');
 }
-function resetPart() {$('#part-form').reset();$('#part-form').elements.id.value='';$('#part-form-title').textContent='Adicionar peça';$('#part-save').textContent='Adicionar peça';$('#part-error').textContent='';$('#capacity-field').hidden=true;$('#part-form').hidden=true;$('#add-part').hidden=false;}
-function addPart(){resetPart();$('#part-form').hidden=false;$('#add-part').hidden=true;$('#part-form').elements.name.focus();}
+function brandChoices() {
+  const search=$('#brand-search').value.trim().toLocaleLowerCase('pt-BR');
+  const labels=$$('#brands label');let visible=0;
+  labels.forEach(label=>{label.hidden=!label.textContent.toLocaleLowerCase('pt-BR').includes(search);if(!label.hidden)visible++;});
+  $('#brand-empty').hidden=visible>0;
+  const selected=$$('#brands input:checked');
+  $('#brand-summary').textContent='Ignorar marcas'+(selected.length?' ('+selected.length+')':'');
+  $('#brand-selected').hidden=!selected.length;
+  $('#brand-selected').innerHTML=selected.map(input=>`<button type="button" class="text" data-action="remove-brand" data-name="${escapeHtml(input.value)}" aria-label="Permitir novamente ${escapeHtml(input.value)}">${escapeHtml(input.value)} ${icon('m8 8 8 8m0-8-8 8')}</button>`).join('');
+}
+function partErrors(fields={}) {
+  $$('#part-form .field-error').forEach(node=>node.remove());
+  $$('#part-form [aria-invalid]').forEach(node=>{node.removeAttribute('aria-invalid');node.removeAttribute('aria-describedby');});
+  const form=$('#part-form'),names={capacity:'capacity_gb',target:'target_text',payment:'target_payment'};
+  let first;
+  for(const [key,message] of Object.entries(fields)){
+    const input=form.elements[names[key]||key];if(!input)continue;
+    const hint=document.createElement('span');hint.className='field-error';hint.id='part-hint-'+key;hint.textContent=message;
+    input.setAttribute('aria-invalid','true');input.setAttribute('aria-describedby',hint.id);input.insertAdjacentElement('afterend',hint);first??=input;
+  }
+  first?.focus();
+}
+function resetPart() {partErrors();$('#part-form').reset();$('#part-form').elements.id.value='';$('#part-form-title').textContent='Adicionar peça';$('#part-save').textContent='Adicionar peça';$('#part-error').textContent='';$('#capacity-field').hidden=true;$('#part-form').hidden=true;$('#parts-list').hidden=false;$('#add-part').hidden=false;$('#brand-settings').open=false;brandChoices();}
+function addPart(){resetPart();$('#parts-list').hidden=true;$('#part-form').hidden=false;$('#add-part').hidden=true;$('#part-form').elements.name.focus();}
 function editPart(id) {
-  const part=state.catalog.components.find(p=>p.id===id);if(!part)return;const form=$('#part-form');form.hidden=false;$('#add-part').hidden=true;
+  const part=state.catalog.components.find(p=>p.id===id);if(!part)return;const form=$('#part-form');form.hidden=false;$('#parts-list').hidden=true;$('#add-part').hidden=true;
   for(const key of ['id','name','kind','query','capacity_gb','target_payment'])form.elements[key].value=part[key]??'';
   form.elements.target_text.value=part.target==null?'':(part.target/100).toLocaleString('pt-BR',{minimumFractionDigits:2,useGrouping:false});form.elements.enabled.checked=!!part.enabled;
   const brands=typeof part.ignored_brands==='string'?JSON.parse(part.ignored_brands):part.ignored_brands||[];
-  $$('#brands input').forEach(input=>input.checked=brands.includes(input.value));$('#capacity-field').hidden=part.kind!=='ssd';$('#part-form-title').textContent='Editar '+part.name;$('#part-save').textContent='Salvar alterações';$('#part-cancel').hidden=false;form.scrollIntoView({block:'start'});form.elements.name.focus();
+  $$('#brands input').forEach(input=>input.checked=brands.includes(input.value));$('#brand-search').value='';brandChoices();partErrors();$('#capacity-field').hidden=part.kind!=='ssd';$('#part-form-title').textContent='Editar '+part.name;$('#part-save').textContent='Salvar alterações';$('#part-cancel').hidden=false;form.scrollIntoView({block:'start'});form.elements.name.focus();
 }
 async function command(action,payload) {const result=await api('/api/commands',{action,payload});notice(result.detail||'Pedido na fila do PC. Você pode acompanhar em Atividade.');await reloadCatalog();return result;}
 async function loadSources() {
@@ -281,8 +313,9 @@ $$('.selection-tabs button').forEach(button=>button.addEventListener('click',()=
 $('#clear-filters').addEventListener('click',()=>{$('#offer-search').value='';$('#offer-shop').value='';state.pages.clear();renderOffers();$('#offer-search').focus();});
 $('#add-part').addEventListener('click',addPart);
 $('#part-form').elements.kind.addEventListener('change',()=>$('#capacity-field').hidden=$('#part-form').elements.kind.value!=='ssd');
+$('#brand-search').addEventListener('input',brandChoices);$('#brands').addEventListener('change',brandChoices);
 $('#part-cancel').addEventListener('click',()=>{resetPart();$('#add-part').focus();});
-$('#part-form').addEventListener('submit',async event=>{event.preventDefault();const form=event.currentTarget,body=Object.fromEntries(new FormData(form));body.id=body.id?Number(body.id):null;body.enabled=form.elements.enabled.checked;body.ignored_brands=$$('#brands input:checked').map(input=>input.value);$('#part-error').textContent='';await busy($('#part-save'),async()=>{try{await api('/api/components',body);resetPart();await reloadCatalog();notice('Peça salva. As buscas online usam este cadastro; o PC recebe a alteração ao conectar.');}catch(error){$('#part-error').textContent=error.fields?Object.values(error.fields).join(' '):error.message;const key=error.fields&&Object.keys(error.fields)[0];form.elements[key]?.focus();throw error;}});});
+$('#part-form').addEventListener('submit',async event=>{event.preventDefault();const form=event.currentTarget,body=Object.fromEntries(new FormData(form));body.id=body.id?Number(body.id):null;body.enabled=form.elements.enabled.checked;body.ignored_brands=$$('#brands input:checked').map(input=>input.value);$('#part-error').textContent='';partErrors();await busy($('#part-save'),async()=>{try{await api('/api/components',body);resetPart();await reloadCatalog();notice('Peça salva. As buscas online usam este cadastro; o PC recebe a alteração ao conectar.');}catch(error){$('#part-error').textContent=error.fields?'Revise os campos indicados.':error.message;partErrors(error.fields||{});if(!error.fields)throw error;}});});
 $('#source-form').addEventListener('submit',event=>{event.preventDefault();const form=event.currentTarget;busy(event.submitter,async()=>{await command('source_save',Object.fromEntries(new FormData(form)));form.reset();});});
 $('#used-form').addEventListener('submit',event=>{event.preventDefault();const draft=Object.fromEntries(new FormData(event.currentTarget));draft.mode='fields';draft.url='';busy(event.submitter,()=>command('olx_save',draft));});
 $('#copy-url').addEventListener('click',()=>busy($('#copy-url'),async()=>{await navigator.clipboard.writeText(location.origin);notice('Endereço copiado.');}));
@@ -302,7 +335,9 @@ document.addEventListener('click',async event=>{
   if(action==='coupon-page'){state.couponPage=Number(button.dataset.page);renderCoupons();$('#coupon-search').focus({preventScroll:true});$('#coupons-list').scrollIntoView({block:'start'});return;}
   if(action==='activity-filter'){state.activityFilter=button.dataset.state;state.activityPage=0;renderActivity();$$('#activity-tabs button').find(el=>el.dataset.state===state.activityFilter)?.focus();return;}
   if(action==='activity-page'){state.activityPage=Number(button.dataset.page);renderActivity();$('#activity-refresh').focus({preventScroll:true});$('#activity-list').scrollIntoView({block:'start'});return;}
-  if(action==='edit-part'){editPart(Number(id));return;}if(action==='details'){details(state.offers.get(id));return;}if(action==='clear-comparison'){state.comparison=[];renderOffers();return;}
+  if(action==='remove-brand'){$$('#brands input').find(input=>input.value===name).checked=false;brandChoices();$('#brand-summary').focus();return;}
+  if(action==='clear-offer-filters'){$('#clear-filters').click();return;}
+  if(action==='edit-part'){await showTab('parts');editPart(Number(id));return;}if(action==='details'){details(state.offers.get(id));return;}if(action==='clear-comparison'){state.comparison=[];renderOffers();return;}
   if(action==='select-piece'){$('#offer-part').value=id;state.pages.clear();renderOffers();return;}
   if(action==='offer-page'){state.pages.set(Number(id),Number(button.dataset.page));renderOffers();requestAnimationFrame(()=>{$('#piece-'+id)?.focus({preventScroll:true});$('#piece-'+id)?.scrollIntoView({block:'start'});});return;}
   if(action==='add-first-part'){await showTab('parts');addPart();return;}

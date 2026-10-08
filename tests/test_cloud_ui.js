@@ -93,3 +93,11 @@ assert.doesNotMatch(node('#activity-list').innerHTML,/Concluído/);assert.equal(
 run("state.activityFilter='history';renderActivity()");assert.equal((node('#activity-list').innerHTML.match(/class="row"/g)||[]).length,10);
 assert.match(node('#activity-pagination').innerHTML,/1–10 de 25/);
 console.log('List focus: coupon pagination, shop scope and outstanding commands passed.');
+
+// Saved offers rank by the displayed amount; an expired coupon cannot move one to the top.
+run(`state.offers=new Map([['old',{id:'old',component_id:1,title:'Antigo',shop:'Mercado Livre',announced:250000,coupon_price:100000,favorite:true,valid_until:'2000-01-01T00:00:00Z'}],['current',{id:'current',component_id:1,title:'Atual',shop:'Pichau',pix:200000,favorite:true}]]);`);
+node('#offer-search').value='';node('#offer-shop').value='';node('#offer-selection').value='favorite';
+assert.equal(run('offerRows(state.catalog.groups[0])[0].id'),'current');
+run("state.comparison=['old','current'];renderComparison()");
+assert.match(node('#comparison').innerHTML,/Sem confirmação atual/);
+console.log('Saved prices: expired coupon ranking and comparison warning passed.');

@@ -144,3 +144,9 @@
 - Referências técnicas e exclusão dos grupos recolhidas; alteração pendente impede envio repetido.
 - Fontes públicas de cupons consultadas independentemente na nuvem, com timeout/cooldown e último resultado preservado por fonte. Códigos sincronizados para o aplicador sem reaplicar ativados.
 - Ao pedir o próximo lote, o PC encerra pedidos em execução sem confirmação há mais de uma hora, sem reenvio automático.
+
+### UX — edição e informação contextual
+- Marcas pesquisáveis, contagem e remoção visível da seleção. Formulário isolado da lista durante edição.
+- Erros de campo com mensagem associada, destaque e foco, sem perder os valores.
+- Peças mostram teto e condição; busca, fabricantes e exclusão ficam em expansão. Listas vazias explicam filtros/teto e oferecem ação adequada.
+- Favoritas ordenadas pelo preço que o cartão realmente mostra; comparação avisa quando o cupom não tem confirmação atual.

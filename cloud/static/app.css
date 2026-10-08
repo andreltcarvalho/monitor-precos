@@ -57,3 +57,9 @@ dialog{color:var(--foreground);background:var(--surface);border:0;border-radius:
 .nav-count{margin-left:auto;font-size:11px;font-variant-numeric:tabular-nums;color:var(--action);background:var(--selected);border-radius:5px;padding:1px 6px}.activity-context{font-size:13px;margin:18px 0 22px}
 
 .offer-seller{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.source-configuration{margin-top:8px}.source-configuration summary{font-size:12px;font-weight:400;color:var(--muted)}.source-configuration .danger{padding-left:0}.source-configuration code{font-size:12px}
+
+.brand-search{max-width:340px;margin:12px 0}.brand-selected{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.brand-selected button{background:var(--selected);color:var(--action);font-weight:400;font-size:12px;min-height:30px;padding:4px 8px}.brand-selected .icon{width:14px;height:14px}.field-error{font-size:12px;color:var(--negative);font-weight:400}[aria-invalid=true]{border-color:var(--negative)}.comparison-note{display:block;color:var(--muted);font-size:11px;margin-top:5px}
+
+.selection-context{font-size:12px;margin-top:12px;max-width:85ch}
+
+.part-criteria{margin-top:8px}.part-criteria summary{font-size:12px;font-weight:400;color:var(--muted)}.part-criteria .danger{font-size:12px;padding-left:0}
