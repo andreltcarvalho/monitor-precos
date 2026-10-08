@@ -212,6 +212,68 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(self.repo.data['offers', old['id']]['pix'], 200000)
         self.assertEqual(self.repo.queued[-1]['action'], 'scan')
 
+    def test_duplicate_coupon_sources_keep_one_saved_application_state(self):
+        import json
+        coupon = {'code': 'SITETODO', 'shop': 'Mercado Livre', 'source': 'Pelando',
+                  'source_url': 'https://www.pelando.com.br/cupons', 'url': 'https://www.mercadolivre.com.br/cupons',
+                  'activation': False, 'conditions': 'Todo site', 'found_at': utcnow(), 'checked_at': utcnow()}
+        self.repo.data['settings', 'public_coupons'] = {'value': json.dumps([coupon, dict(coupon, source='Outra fonte')])}
+        self.repo.data['coupon_applications', 'SITETODO'] = {'code': 'SITETODO', 'status': 'inserted',
+                    'detail': 'Adicionado', 'found_at': utcnow(), 'attempts': 1, 'source': 'Pelando'}
+        body = self.client.get('/api/coupons').json()
+        self.assertEqual(len(body['applications']), 1)
+        self.assertEqual(body['applications'][0]['group'], 'active')
+        self.assertEqual(body['applications'][0]['status'], 'inserted')
+
+    def test_check_http_offer_runs_in_cloud_and_saves_observation(self):
+        old = offer('http', 200000, origins='Telegram')
+        self.repo.data['offers', old['id']] = old
+        collectors = SimpleNamespace(check=AsyncMock(return_value=dict(old, pix=190000)), close=AsyncMock())
+        with patch('cloud.app.Shops', return_value=collectors):
+            response = self.client.post('/api/commands', json={'action': 'check', 'payload': {'key': old['id']}})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['checked'])
+        self.assertEqual(response.json()['execution'], 'cloud')
+        self.assertEqual(self.repo.data['offers', old['id']]['pix'], 190000)
+        self.assertEqual(self.repo.data['offers', old['id']]['origins'], 'Telegram')
+        self.assertEqual(len([row for row in self.repo.written if row['kind'] == 'observations']), 1)
+        self.assertFalse(self.repo.queued)
+        collectors.close.assert_awaited_once()
+
+    def test_check_http_failure_preserves_price_but_removes_confirmation(self):
+        old = offer('blocked', 200000)
+        self.repo.data['offers', old['id']] = old
+        collectors = SimpleNamespace(check=AsyncMock(side_effect=ValueError('blocked')), close=AsyncMock())
+        with patch('cloud.app.Shops', return_value=collectors):
+            response = self.client.post('/api/commands', json={'action': 'check', 'payload': {'key': old['id']}})
+        self.assertFalse(response.json()['checked'])
+        saved = self.repo.data['offers', old['id']]
+        self.assertEqual(saved['pix'], 200000)
+        self.assertIsNone(saved['valid_until'])
+        self.assertFalse(self.repo.written)
+        self.assertFalse(self.repo.queued)
+
+    def test_check_browser_offer_stays_local(self):
+        old = offer('browser', 200000, shop='Mercado Livre', url='https://www.mercadolivre.com.br/produto/p/MLB123')
+        self.repo.data['offers', old['id']] = old
+        with patch('cloud.app.Shops') as collectors:
+            response = self.client.post('/api/commands', json={'action': 'check', 'payload': {'key': old['id']}})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.repo.queued[-1]['action'], 'check')
+        collectors.assert_not_called()
+
+    def test_check_does_not_trust_cloud_shop_label_for_another_domain(self):
+        self.repo.data['offers', 'unknown'] = offer('unknown', 200000, url='https://example.org/item')
+        with patch('cloud.app.Shops') as collectors:
+            self.client.post('/api/commands', json={'action': 'check', 'payload': {'key': 'unknown'}})
+        collectors.assert_not_called()
+
+    def test_check_unknown_offer_does_not_start_collector(self):
+        with patch('cloud.app.Shops') as collectors:
+            response = self.client.post('/api/commands', json={'action': 'check', 'payload': {'key': 'missing'}})
+        self.assertEqual(response.status_code, 404)
+        collectors.assert_not_called()
+
     def test_scan_cooldown_refuses_repeat_without_calling_collectors(self):
         self.repo.request = AsyncMock(return_value=False)
         with patch('cloud.app.Shops') as collectors:

@@ -7,6 +7,28 @@ from core import canonical_url, detect_brand, effective_price, reading_valid_unt
 from cloud_protocol import offer_key
 
 
+async def check_offer(collectors, repo, part, old, timeout=60):
+    """Confere uma oferta HTTP sem enfileirar trabalho no PC."""
+    try:
+        async with asyncio.timeout(timeout):
+            reading = await collectors.check(old['url'], part)
+        row = {**old, **reading, 'id': old['id'], 'component_id': part['id'],
+               'brand': reading.get('brand') or detect_brand(reading['title']),
+               'coupon_price': reading.get('coupon_price'), 'valid_until': reading_valid_until(reading)}
+        stamp = row.get('checked_at') or utcnow()
+        observation = {field: row.get(field) for field in
+                       ('pix', 'card', 'announced', 'coupon_price', 'status', 'availability')}
+        observation.update(offer_id=old['id'], observed_at=stamp)
+        await repo.put_many([{'kind': 'offers', 'record_key': old['id'], 'data': row},
+                            {'kind': 'observations', 'record_key': old['id'] + ':' + stamp, 'data': observation}])
+        return {'detail': 'Oferta conferida online.', 'checked': True, 'execution': 'cloud'}
+    except (httpx.HTTPError, ValueError, TimeoutError):
+        await repo.put('offers', old['id'], dict(old, valid_until=None,
+                       status='Falha na revalidação · anúncio preservado'))
+        return {'detail': 'A loja bloqueou ou não concluiu a leitura. Último preço preservado, sem confirmação.',
+                'checked': False, 'execution': 'cloud'}
+
+
 async def collect_shop(collectors, repo, part, known, name, timeout=120):
     count, failures = 0, 0
     try:

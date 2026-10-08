@@ -79,3 +79,11 @@ Cards conservam modelo e especificações do resumo existente, título original 
 Peças começa pela lista, revelando cadastro/edição por ação explícita; cadastro de grupos e busca OLX ficam em expansões. Cupons mantém loja, fonte, estado de aplicação e filtros visíveis; condições abertas são conservadas durante a atualização da lista. Conexão e comandos destinados ao PC mantêm contexto de sincronização e fila.
 
 Evidências de apresentação com dados sintéticos: `.impeccable/review/cloud-desktop.jpg`, `cloud-1024.jpg`, `cloud-coupons.jpg` e `cloud-parts.jpg`. Essas imagens registram layout e estados; não comprovam consultas reais, autenticação ou entrega de comandos ao PC.
+
+### Painel único — refinamento de 08/10/2026
+
+O catálogo usa o seletor de peças como único controle de contexto, com preço inicial da seleção válida. As seleções Mais baratas/Favoritas/Ocultas e filtros de texto/loja permanecem visíveis. Preço de 32px com condição explícita; cartões não repetem mensagens genéricas de pagamento. Idade da leitura visível, horário absoluto no título acessível. Detalhe prioriza preço e pagamentos existentes; origem e conferência em expansão. Fonte e frete desconhecidos não são inferidos.
+
+Cupons abre no Mercado Livre quando houver códigos dessa loja; filtros Todos/Novos/Ativados/Falhas/Desativados mostram contagens da seleção. Ações em lote exibem quantidade e impedem novo pedido enquanto houver aplicação pendente. Condições e publicação ficam sob demanda; estado confirmado é único por código, mesmo vindo de várias fontes. Copiar código e Abrir na loja são ações distintas; Ver publicação usa source_url.
+
+Histórico tem eixos de preço, pontos com valor/data, espaçamento por data real e lacunas sem interpolação; valores por dia ficam numa expansão. Fontes distingue consultas na nuvem e sessões do Chrome, com resultados reais e falhas visíveis. A lateral informa sincronização do PC sem bloquear a leitura da conta. URLs com fragmento preservam área e permitem voltar. Carregamento, erro com retentativa e aviso dispensável são explícitos; fechar diálogo devolve foco ao acionador.

@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from cloud.repository import Repository, configuration, user_session
-from cloud.collection import collect_shop, ScheduledReadings
+from cloud.collection import collect_shop, check_offer, ScheduledReadings
 from cloud_protocol import CLOUD_SHOPS, LOCAL_SHOPS, PUBLIC_SETTINGS, SYNC_KINDS, catalog, offer_key
 from core import BRAND_ALIASES, canonical_url, confirmed_price, coupon_is_today, detect_brand, effective_price, matches, offer_matches, price_is_current, reading_valid_until, top_offers, tracking_price, utcnow, valid_url
 from forms import component_input_errors
@@ -274,11 +274,14 @@ async def get_coupons(repo=Depends(repository)):
     coupons = [dict(item, code=code.strip()) for item in coupon_catalog(posts, pichau, public)
                for code in (item['codes'].split(',') if item['codes'] else [''])]
     applications = {row['code']: row for row in await values(repo, 'coupon_applications') if coupon_is_today(row.get('found_at'))}
-    ml = []
+    ml, seen_codes = [], set()
     for item in coupons:
         if item.get('shop') != 'Mercado Livre' or item.get('activation') or not re.fullmatch(r'[A-Z0-9][A-Z0-9_-]{2,39}', item.get('code', '').upper()):
             continue
         code = item['code'].upper()
+        if code in seen_codes:
+            continue
+        seen_codes.add(code)
         row = applications.pop(code, {'code': code, 'status': 'new', 'detail': '', 'found_at': item.get('found_at'), 'source': item.get('source'), 'attempts': 0})
         if row.get('source') == 'Melhores Cartões':
             row = dict(row, source=item.get('source'))
@@ -379,8 +382,21 @@ async def command(data: dict = Body(...), repo=Depends(repository)):
                'olx_save', 'olx_toggle', 'olx_delete', 'olx_scan'}
     if action not in allowed or not isinstance(payload, dict) or len(json.dumps(payload)) > 5000:
         raise HTTPException(422, 'Pedido inválido.')
-    if action == 'check' and not await repo.get('offers', payload.get('key', '')):
-        raise HTTPException(404, 'Oferta não encontrada.')
+    if action == 'check':
+        old = await repo.get('offers', payload.get('key', ''))
+        if not old:
+            raise HTTPException(404, 'Oferta não encontrada.')
+        # Confia no domínio validado, não no nome vindo do cadastro/snapshot.
+        name = shop_name(old.get('url', ''))
+        if name in CLOUD_SHOPS:
+            part = next((p for p in await components(repo) if p['id'] == old['component_id']), None)
+            if not part:
+                raise HTTPException(404, 'Peça não encontrada.')
+            collectors = Shops()
+            try:
+                return await check_offer(collectors, repo, part, old)
+            finally:
+                await collectors.close()
     if action in {'source_toggle', 'source_delete'} and not await repo.get('sources', payload.get('id', '')):
         raise HTTPException(404, 'Fonte não encontrada.')
     if action in {'olx_toggle', 'olx_delete', 'olx_scan'} and not await repo.get('olx_searches', payload.get('id', '')):

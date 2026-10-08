@@ -2,6 +2,8 @@
 
 ## 2026-10-08
 
+- Painel único refinado: seleção de peça sem controle duplicado, cartões com preço/condição e idade da leitura, detalhes sob demanda, navegação com URL e recuperação de carregamento/erro. Cupons abre no Mercado Livre, mostra estados e quantidades, distingue loja/publicação e impede lotes repetidos na fila. Histórico usa datas reais, mostra valores nos pontos e não interpola dias sem leitura; tabela recolhida. Fontes distingue nuvem/Chrome e resultados de consultas. Conferência individual das lojas HTTP passa a rodar na nuvem com observação persistida; falhas preservam o preço sem confirmação. Código repetido em várias fontes mantém um único resultado salvo de ativação.
+
 - Melhores Cartões removido dos cupons do Mercado Livre, incluindo cache e tentativas antigas nas listas e lotes. Resultados anteriores de ativação são preservados quando o mesmo código aparece em uma fonte válida. Pelando integrado por HTTP com código explícito, estado ativo, publicação no dia de São Paulo e condições para todo o site ou informática/eletrônicos; selecionados sem categoria, outras categorias, primeira compra, antigos e duplicados são descartados. 225 testes específicos aprovados e compilação limpa; coleta real encontrou um cupom relevante do Mercado Livre entre 82 publicações do Pelando.
 
 ## 2026-10-07

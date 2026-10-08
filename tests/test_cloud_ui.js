@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const nodes = new Map();
 const node = selector => {
   if (selector === '#comparison details') return null;
-  if (!nodes.has(selector)) nodes.set(selector, {value:'', innerHTML:'', textContent:'', hidden:false});
+  if (!nodes.has(selector)) nodes.set(selector, {value:'', innerHTML:'', textContent:'', hidden:false, setAttribute(){},removeAttribute(){}});
   return nodes.get(selector);
 };
 const context = vm.createContext({document:{querySelector:node,querySelectorAll:()=>[],activeElement:null},URL,Date,console});
@@ -48,4 +48,28 @@ assert.match(announcedCard,/Pagamento não informado/);
 assert.doesNotMatch(announcedCard,/Total no cartão/);
 assert.match(announcedCard,/2\.000,00/);
 assert.equal(run('state.catalog.groups[0].offers[0].card'),240000);
-console.log('Cloud UI: pagination, top-12, favorites, matching group and coupon payment passed.');
+// Coupon filters include new codes without an application; states never imply activation.
+run(`state.coupons={coupons:[{code:'NOVO',shop:'Pichau',source:'Oficial',conditions:'Desconto'},
+ {code:'OK',shop:'Mercado Livre',source:'Telegram',source_url:'https://t.me/ofertas/1',url:'https://mercadolivre.com.br/cupons'},
+ {code:'FALHA',shop:'Mercado Livre',source:'Pelando'}],applications:[{code:'OK',group:'active',label:'Inserido'},
+ {code:'FALHA',group:'failed',label:'Pode retentar',retryable:true,failure:'Temporário'}]};renderCoupons();`);
+assert.match(node('#coupons-list').innerHTML,/NOVO/);
+assert.match(node('#coupons-list').innerHTML,/https:\/\/t.me\/ofertas\/1/);
+assert.match(node('#coupons-list').innerHTML,/Ver publicação/);
+assert.equal(node('#coupon-apply').disabled,true,'No new Mercado Livre code to apply');
+assert.equal(node('#coupon-retry').disabled,false);
+node('#coupon-state').value='new';run('renderCoupons()');
+assert.match(node('#coupons-list').innerHTML,/NOVO/);
+assert.doesNotMatch(node('#coupons-list').innerHTML,/coupon-code">OK/);
+node('#coupon-state').value='active';run('renderCoupons()');
+assert.match(node('#coupons-list').innerHTML,/coupon-code">OK/);
+assert.doesNotMatch(node('#coupons-list').innerHTML,/NOVO/);
+run("state.catalog.commands=[{action:'coupon_batch',status:'pending'}];renderCoupons()");
+assert.equal(node('#coupon-retry').disabled,true,'Queued batches cannot be sent twice');
+const chart=run(`historyView({points:[{date:'2026-10-01',price:200000},{date:'2026-10-02',price:210000},{date:'2026-10-05',price:190000}],minimum:190000,median:200000})`);
+assert.equal((chart.match(/stroke-width="2.5"/g)||[]).length,1,'Missing days do not become connected readings');
+assert.match(chart,/<details class="disclosure history-records">/);
+assert.match(chart,/<circle[^>]*><title>05\/10\/2026:/);
+run("state.catalog.components=[{id:1,name:'GPU',query:'rtx',enabled:true,ignored_brands:'[]'}];renderParts()");
+assert.doesNotMatch(node('#parts-list').innerHTML,/ · Ignorar/);
+console.log('Cloud UI: catalogue, payment, coupon states, batch guards and history gaps passed.');
