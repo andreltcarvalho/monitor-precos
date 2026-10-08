@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from cloud.repository import Repository, configuration, user_session
 from cloud.collection import collect_shop, check_offer, collect_public_coupons, ScheduledReadings
 from cloud_protocol import CLOUD_SHOPS, LOCAL_SHOPS, PUBLIC_SETTINGS, SYNC_KINDS, catalog, offer_key
-from core import BRAND_ALIASES, canonical_url, confirmed_price, coupon_is_today, detect_brand, effective_price, matches, offer_matches, price_is_current, reading_valid_until, top_offers, tracking_price, utcnow, valid_url
+from core import BRAND_ALIASES, canonical_url, confirmed_price, coupon_is_today, detect_brand, effective_price, matches, offer_matches, price_is_current, reading_valid_until, source_input, top_offers, tracking_price, utcnow, valid_url
 from forms import component_input_errors
 from ml_coupon_applicator import application_state
 from presentation import coupon_catalog, offer_card_data
@@ -452,6 +452,18 @@ async def command(data: dict = Body(...), repo=Depends(repository)):
             finally:
                 await collectors.close()
     payload = {key: value for key, value in payload.items() if key != 'label'}
+    if action == 'source_save':
+        if set(payload) != {'name', 'reference'}:
+            raise HTTPException(422, 'Informe nome e referência do grupo.')
+        try:
+            payload = source_input(payload['name'], payload['reference'])
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from error
+        existing, queued = await asyncio.gather(values(repo, 'sources'), repo.commands())
+        references = [row.get('reference', '') for row in existing] + [row.get('payload', {}).get('reference', '')
+            for row in queued if row.get('action') == 'source_save' and row.get('status', 'pending') in {'pending','running'}]
+        if payload['reference'].casefold() in {value.casefold() for value in references if isinstance(value, str)}:
+            raise HTTPException(409, 'Este grupo já está cadastrado ou foi enviado ao PC.')
     if action == 'olx_save':
         from olx import search_input
         allowed_fields = {'name', 'mode', 'url', 'query', 'state', 'city', 'target', 'excluded'}

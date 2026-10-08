@@ -96,3 +96,8 @@ Rodada 14: 67 testes cloud aprovados. UI JS protege elegibilidade/preço/pagina�
 Reavaliar preços quando o relógio cruza valid_until, sem esperar resposta HTTP. Mais baratas remove leituras vencidas; favoritas/ocultas mantêm o último valor com aviso. Se os detalhes estiverem abertos, atualizar condição preservando foco e disclosures. Comparação usa o preço com cupom só enquanto válido. Validar clock e detalhes no Chrome.
 
 Rodada 15: quatro testes JS e Chrome/ASGI aprovados. Teste de relógio protege catálogo e preço salvo; Chrome verifica atualização dos detalhes com foco preservado.
+
+## Rodada 16 — grupos validados antes da fila
+Compartilhar a normalização já usada pelo cadastro local, sem banco ou acesso ao Telegram na nuvem. API valida formato e duplicação (inclusive pedido pendente); formulário preserva rascunho e explica erro junto aos campos. Confirmação da conta/participação continua local e não há entrada automática em grupos.
+
+Rodada 16: 68 testes cloud e 50 testes core aprovados; JS e Chrome/ASGI confirmaram erro no formulário sem perder rascunho, normalização e bloqueio de duplicação pendente.

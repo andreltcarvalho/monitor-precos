@@ -73,3 +73,5 @@ dialog{color:var(--foreground);background:var(--surface);border:0;border-radius:
 .used-note{font-size:13px;max-width:90ch;margin:18px 0}.used-configuration{margin:-6px 0 18px}.used-configuration summary,.used-reading summary{font-size:12px;font-weight:400;color:var(--muted)}.used-configuration p,.used-reading p{font-size:13px;margin:8px 0}.used-card .offer-model{min-height:76px}.used-card .price-block{min-height:55px}.used-card .offer-open{flex:none;margin-top:auto}.used-reading{margin-bottom:6px}
 
 #used-error{color:var(--negative);font-size:13px;margin-top:12px}
+
+.inline-form{flex-wrap:wrap}#source-error{flex-basis:100%;color:var(--negative);font-size:13px}#source-error:empty,#used-error:empty{display:none}

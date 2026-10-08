@@ -159,6 +159,18 @@ class ApiTests(unittest.TestCase):
         self.assertEqual([row['id'] for row in result['listings'] if row['eligible']],['good'])
         self.assertEqual(len(result['listings']),5)
 
+    def test_source_save_validates_and_deduplicates_before_queue(self):
+        self.repo.data['sources','1']={'id':1,'name':'Existente','reference':'@ofertasexistentes'}
+        self.assertEqual(self.client.post('/api/commands',json={'action':'source_save','payload':{'name':'Outro','reference':'https://t.me/ofertasexistentes'}}).status_code,409)
+        for reference in ('https://example.com/grupo','@abc',''):
+            self.assertEqual(self.client.post('/api/commands',json={'action':'source_save','payload':{'name':'Teste','reference':reference}}).status_code,422)
+        self.assertFalse(self.repo.queued)
+        draft={'name':' Novo grupo ','reference':'[Canal](https://t.me/novogrupo)'}
+        self.assertEqual(self.client.post('/api/commands',json={'action':'source_save','payload':draft}).status_code,200)
+        self.assertEqual(self.repo.queued[-1]['payload'],{'name':'Novo grupo','reference':'@novogrupo'})
+        self.assertEqual(self.client.post('/api/commands',json={'action':'source_save','payload':{'name':'Duplicado','reference':'@NOVOGRUPO'}}).status_code,409)
+        self.assertEqual(len(self.repo.queued),1)
+
     def test_component_delete_preserves_name_for_activity_after_removal(self):
         self.assertEqual(self.client.delete('/api/components/1').status_code,200)
         self.assertEqual(self.repo.queued[-1]['payload']['label'],part()['name'])

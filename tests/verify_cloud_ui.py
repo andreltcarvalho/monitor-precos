@@ -129,6 +129,19 @@ async def main():
             await page.locator('[data-action="source-toggle"]').click();await page.wait_for_function('document.querySelector("#telegram-list").innerText.includes("Alteração na fila")')
             assert 'Alteração na fila' in await page.locator('#telegram-list').inner_text()
             assert repo.queued[-1]['action']=='source_toggle'
+            await page.locator('#telegram-section>details.disclosure>summary').click()
+            source_form=page.locator('#source-form');count=len(repo.queued)
+            await source_form.locator('[name="name"]').fill('Outro grupo')
+            await source_form.locator('[name="reference"]').fill('@abc')
+            await source_form.locator('button[type="submit"]').click()
+            await page.wait_for_function('document.querySelector("#source-error").innerText.length>0')
+            assert len(repo.queued)==count
+            assert await source_form.locator('[name="reference"]').input_value()=='@abc'
+            await source_form.locator('[name="reference"]').fill('https://t.me/grupotestexyz')
+            await source_form.locator('button[type="submit"]').click()
+            await page.wait_for_function('!document.querySelector("#source-form").closest("details").open')
+            assert repo.queued[-1]['action']=='source_save'
+            assert repo.queued[-1]['payload']['reference']=='@grupotestexyz'
             session=page.locator('.session-controls[data-shop="Mercado Livre"]');await session.locator('summary').click();await session.locator('[data-action="session-open"]').click();await page.wait_for_function('document.querySelector("[data-action=session-open]").disabled');assert repo.queued[-1]['action']=='session_open'
             for i in range(30):
                 repo.data['coupon_applications','CODIGO'+str(i)]={'code':'CODIGO'+str(i),'status':'inserted','detail':'Ativado','found_at':utcnow(),'source':'Teste'}

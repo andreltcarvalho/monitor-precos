@@ -28,6 +28,26 @@ def coupon_is_today(stamp: str, now: datetime | None = None) -> bool:
         return False
 
 
+def source_input(name: str, reference: str) -> dict:
+    if not isinstance(name, str) or not isinstance(reference, str):
+        raise ValueError('Informe nome e referência do grupo.')
+    reference = reference.strip()
+    markdown = re.fullmatch(r'\[[^\]]*\]\(([^)]+)\)', reference)
+    if markdown:
+        reference = markdown[1]
+    if reference.startswith('https://t.me/'):
+        reference = '@' + urlsplit(reference).path.strip('/').removeprefix('s/').split('/')[0]
+    if reference.startswith('@') and re.fullmatch(r'@[A-Za-z0-9_]{5,}', reference):
+        pass
+    elif re.fullmatch(r'-[1-9]\d+', reference):
+        pass
+    else:
+        raise ValueError('Use @nome, link público t.me/nome ou ID negativo de um grupo em que você já participa.')
+    if not name.strip():
+        raise ValueError('Informe o nome da fonte.')
+    return {'name': name.strip(), 'reference': reference}
+
+
 def normalized(value: str) -> str:
     return ''.join(c for c in unicodedata.normalize('NFKD', value.lower())
                    if not unicodedata.combining(c))
@@ -533,22 +553,9 @@ class Store:
         self.db.commit()
 
     def save_source(self, name: str, reference: str):
-        reference = reference.strip()
-        markdown = re.fullmatch(r'\[[^\]]*\]\(([^)]+)\)', reference)
-        if markdown:
-            reference = markdown[1]
-        if reference.startswith('https://t.me/'):
-            reference = '@' + urlsplit(reference).path.strip('/').removeprefix('s/').split('/')[0]
-        if reference.startswith('@') and re.fullmatch(r'@[A-Za-z0-9_]{5,}', reference):
-            pass
-        elif re.fullmatch(r'-[1-9]\d+', reference):
-            pass
-        else:
-            raise ValueError('Use @nome, link público t.me/nome ou ID negativo de um grupo em que você já participa.')
-        if not name.strip():
-            raise ValueError('Informe o nome da fonte.')
+        source = source_input(name, reference)
         try:
-            self.db.execute('INSERT INTO sources(name,reference) VALUES(?,?)', (name.strip(), reference))
+            self.db.execute('INSERT INTO sources(name,reference) VALUES(?,?)', (source['name'], source['reference']))
             self.db.commit()
         except sqlite3.IntegrityError as exc:
             raise ValueError('Esta fonte já está cadastrada.') from exc

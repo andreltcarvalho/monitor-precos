@@ -198,3 +198,8 @@ Consulta as leituras da peça e do período diretamente no Supabase, mantendo RL
 - Mais baratas remove leituras vencidas pelo relógio, sem esperar nova resposta do servidor.
 - Favoritas preserva o último valor e mostra que precisa conferir; cupom vencido deixa de ser o preço atual.
 - Detalhes atualizam a condição preservando foco e seções abertas da mesma oferta.
+
+### 08/10/2026 — validação de grupos junto ao formulário
+- Normalização de referência compartilhada entre API e cadastro local.
+- Formato e duplicação são verificados antes do pedido ao PC, inclusive grupos ainda na fila.
+- Erro preserva o rascunho; cadastro correto fecha o formulário e segue para Atividade.
