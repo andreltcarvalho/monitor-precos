@@ -87,6 +87,7 @@ class ScheduledCollectionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(saved['pix'], old['pix'])
         self.assertIsNone(saved['valid_until'])
         self.assertEqual(status['failures'], 1)
+        self.assertIn('403',status['reason'])
         self.assertIn('histórico preservado', status['detail'])
 
     async def test_timeout_finishes_batch_and_keeps_completed_readings(self):

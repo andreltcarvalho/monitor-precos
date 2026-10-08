@@ -87,3 +87,9 @@ O catálogo usa o seletor de peças como único controle de contexto, com preço
 Cupons abre no Mercado Livre quando houver códigos dessa loja; filtros Todos/Novos/Ativados/Falhas/Desativados mostram contagens da seleção. Ações em lote exibem quantidade e impedem novo pedido enquanto houver aplicação pendente. Condições e publicação ficam sob demanda; estado confirmado é único por código, mesmo vindo de várias fontes. Copiar código e Abrir na loja são ações distintas; Ver publicação usa source_url.
 
 Histórico tem eixos de preço, pontos com valor/data, espaçamento por data real e lacunas sem interpolação; valores por dia ficam numa expansão. Fontes distingue consultas na nuvem e sessões do Chrome, com resultados reais e falhas visíveis. A lateral informa sincronização do PC sem bloquear a leitura da conta. URLs com fragmento preservam área e permitem voltar. Carregamento, erro com retentativa e aviso dispensável são explícitos; fechar diálogo devolve foco ao acionador.
+
+### Recuperação de sessões e fila — 08/10/2026
+
+Fontes mantém Abrir no PC/Confirmar sessão dentro da expansão do Chrome, habilitados apenas com sincronização recente e sem pedido de sessão pendente. Perfil salvo não significa busca confirmada. Apenas estado configurado/login pendente e descrição saem do PC; cookies e caminhos permanecem locais. Atividade distingue cancelamento de falha e permite cancelar somente pedidos ainda pendentes; exclusão de peça já aplicada na nuvem não é reversível pela fila.
+
+Desativar/reativar cupom é uma preferência imediata da nuvem, preservando o resultado anterior e sincronizando com o PC. O override vale apenas para o dia de descoberta. A atualização manual da peça mostra cooldown de cinco minutos no botão; buscas online independentes são concorrentes e o resultado informa falhas. As ações com Chrome continuam após as consultas HTTP.

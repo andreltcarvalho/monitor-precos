@@ -145,16 +145,18 @@ async def values(repo, kind):
 
 
 async def components(repo):
-    rows = await values(repo, 'components')
-    overrides = {row['record_key']: row['data'] for row in await repo.records('overrides')}
+    rows, override_rows = await asyncio.gather(values(repo, 'components'), repo.records('overrides'))
+    overrides = {row['record_key']: row['data'] for row in override_rows}
     return [dict(row, **overrides.get('component:' + str(row['id']), {})) for row in rows
             if not overrides.get('component:' + str(row['id']), {}).get('deleted')]
 
 
 @app.get('/api/catalog')
 async def get_catalog(repo=Depends(repository)):
-    parts, offers = await components(repo), await values(repo, 'offers')
-    prefs = {row['record_key']: row['data'] for row in await repo.records('preferences')}
+    parts, offers, preference_rows, statuses, commands, scans = await asyncio.gather(
+        components(repo), values(repo, 'offers'), repo.records('preferences'),
+        values(repo, 'status'), repo.commands(), repo.records('scans'))
+    prefs = {row['record_key']: row['data'] for row in preference_rows}
     saved = [dict(row, **prefs.get(str(row['id']), {})) for row in offers]
     for row in saved:
         row['display'] = offer_card_data(row)
@@ -163,7 +165,9 @@ async def get_catalog(repo=Depends(repository)):
         for row in group['offers']:
             row['display'] = offer_card_data(row)
     return {'groups': groups, 'components': parts, 'offers': saved,
-            'status': await values(repo, 'status'), 'commands': await repo.commands(),
+            'status': statuses, 'commands': commands,
+            'scan_next_at': {row['record_key']: (datetime.fromisoformat(row['updated_at']) + timedelta(minutes=5)).isoformat()
+                             for row in scans if row.get('updated_at')},
             'offer_limit': 12, 'record_limit_reached': len(offers) >= 10000}
 
 
@@ -248,10 +252,11 @@ async def history(identifier: int, payment: str = 'effective', repo=Depends(repo
 
 @app.get('/api/sources')
 async def sources(repo=Depends(repository)):
-    settings = {row['record_key']: row['data'].get('value') for row in await repo.records('settings')}
+    setting_rows, status_rows, telegram = await asyncio.gather(repo.records('settings'), values(repo, 'status'), values(repo, 'sources'))
+    settings = {row['record_key']: row['data'].get('value') for row in setting_rows}
+    worker = next((row for row in status_rows if row.get('name') == 'PC conectado'), None)
     return {'shops': [{'name': name, 'local': name in LOCAL_SHOPS, 'enabled': settings.get('shop:' + name, '1') == '1'}
-                      for name in CLOUD_SHOPS + LOCAL_SHOPS], 'telegram': await values(repo, 'sources'),
-            'status': await values(repo, 'status')}
+                      for name in CLOUD_SHOPS + LOCAL_SHOPS], 'telegram': telegram, 'status': status_rows, 'worker': worker}
 
 
 @app.post('/api/shops')
@@ -267,13 +272,18 @@ async def toggle_shop(data: dict = Body(...), repo=Depends(repository)):
 
 @app.get('/api/coupons')
 async def get_coupons(repo=Depends(repository)):
-    posts = [p for p in await values(repo, 'coupons') if coupon_is_today(p.get('found_at') or p.get('published_at'))]
-    settings = {row['record_key']: row['data'].get('value', '[]') for row in await repo.records('settings')}
+    post_rows, setting_rows, application_rows, override_rows = await asyncio.gather(
+        values(repo, 'coupons'), repo.records('settings'), values(repo, 'coupon_applications'), repo.records('overrides'))
+    posts = [p for p in post_rows if coupon_is_today(p.get('found_at') or p.get('published_at'))]
+    settings = {row['record_key']: row['data'].get('value', '[]') for row in setting_rows}
+    disabled = {row['data']['code']: row['data']['disabled'] for row in override_rows
+                if row['record_key'].startswith('coupon-disabled:') and coupon_is_today(row['data'].get('found_at'))}
     public = [item for item in json.loads(settings.get('public_coupons', '[]')) if coupon_is_today(item.get('found_at') or item.get('checked_at'))]
     pichau = [item for item in json.loads(settings.get('pichau_coupons', '[]')) if coupon_is_today(item.get('found_at') or item.get('checked_at'))]
     coupons = [dict(item, code=code.strip()) for item in coupon_catalog(posts, pichau, public)
                for code in (item['codes'].split(',') if item['codes'] else [''])]
-    applications = {row['code']: row for row in await values(repo, 'coupon_applications') if coupon_is_today(row.get('found_at'))}
+    applications = {row['code']: dict(row, disabled=disabled.get(row['code'], row.get('disabled', False)))
+                    for row in application_rows if coupon_is_today(row.get('found_at'))}
     ml, seen_codes = [], set()
     for item in coupons:
         if item.get('shop') != 'Mercado Livre' or item.get('activation') or not re.fullmatch(r'[A-Z0-9][A-Z0-9_-]{2,39}', item.get('code', '').upper()):
@@ -282,7 +292,7 @@ async def get_coupons(repo=Depends(repository)):
         if code in seen_codes:
             continue
         seen_codes.add(code)
-        row = applications.pop(code, {'code': code, 'status': 'new', 'detail': '', 'found_at': item.get('found_at'), 'source': item.get('source'), 'attempts': 0})
+        row = applications.pop(code, {'code': code, 'status': 'new', 'detail': '', 'found_at': item.get('found_at'), 'source': item.get('source'), 'attempts': 0, 'disabled': disabled.get(code, False)})
         if row.get('source') == 'Melhores Cartões':
             row = dict(row, source=item.get('source'))
         ml.append(dict(row, **application_state(row)))
@@ -331,19 +341,21 @@ async def scan(identifier: int, repo=Depends(repository)):
     settings = {r['record_key']: r['data'].get('value') for r in await repo.records('settings')}
     collectors = Shops()
     statuses = []
-    started = asyncio.get_running_loop().time()
     try:
-        for name in CLOUD_SHOPS:
-            if settings.get('shop:' + name, '1') != '1':
-                continue
-            status = await collect_shop(collectors, repo, part, known, name,
-                                        max(1, 220-(asyncio.get_running_loop().time()-started)))
-            statuses.append(status)
+        statuses = await asyncio.gather(*(collect_shop(collectors, repo, part, known, name, 120)
+            for name in CLOUD_SHOPS if settings.get('shop:' + name, '1') == '1'))
     finally:
         await collectors.close()
     if any(settings.get('shop:' + name, '1') == '1' for name in LOCAL_SHOPS):
         await repo.command('scan', {'component_id': identifier})
-    return {'status': statuses, 'detail': 'Consultas online concluídas. Lojas com Chrome serão consultadas pelo PC quando conectado.'}
+    count = sum(row['count'] for row in statuses)
+    failed = [row['name'] for row in statuses if row['failures']]
+    detail = f'{count} leituras online concluídas.'
+    if failed:
+        detail += ' Falhas em ' + ', '.join(failed) + '; veja Fontes.'
+    if any(settings.get('shop:' + name, '1') == '1' for name in LOCAL_SHOPS):
+        detail += ' Consultas com Chrome ficaram na fila do PC.'
+    return {'status': statuses, 'detail': detail}
 
 
 @app.post('/api/scheduled/collect')
@@ -379,9 +391,27 @@ async def used(repo=Depends(repository)):
 async def command(data: dict = Body(...), repo=Depends(repository)):
     action, payload = data.get('action'), data.get('payload', {})
     allowed = {'check', 'coupon_batch', 'coupon_retry', 'coupon_disabled', 'source_save', 'source_toggle', 'source_delete',
-               'olx_save', 'olx_toggle', 'olx_delete', 'olx_scan'}
+               'olx_save', 'olx_toggle', 'olx_delete', 'olx_scan', 'session_open', 'session_confirm'}
     if action not in allowed or not isinstance(payload, dict) or len(json.dumps(payload)) > 5000:
         raise HTTPException(422, 'Pedido inválido.')
+    if action in {'session_open', 'session_confirm'}:
+        if payload.get('shop') not in LOCAL_SHOPS:
+            raise HTTPException(422, 'Escolha Mercado Livre ou Shopee para gerenciar a sessão.')
+    if action == 'coupon_disabled':
+        code = str(payload.get('code', '')).upper()
+        if not re.fullmatch(r'[A-Z0-9][A-Z0-9_-]{2,39}', code) or type(payload.get('disabled')) is not bool:
+            raise HTTPException(422, 'Código ou estado inválido.')
+        body = await get_coupons(repo)
+        row = next((row for row in body['applications'] if row['code'] == code), None)
+        if not row:
+            raise HTTPException(404, 'Cupom de hoje não encontrado.')
+        saved = {field: row.get(field) for field in
+                 ('code', 'status', 'detail', 'found_at', 'source', 'attempts', 'attempted_at')}
+        saved['disabled'] = payload['disabled']
+        await repo.put('coupon_applications', code, saved)
+        await repo.put('overrides', 'coupon-disabled:' + code,
+                       {'code': code, 'disabled': saved['disabled'], 'found_at': saved['found_at']})
+        return {'detail': 'Cupom desativado.' if saved['disabled'] else 'Cupom reativado.', 'execution': 'cloud'}
     if action == 'check':
         old = await repo.get('offers', payload.get('key', ''))
         if not old:
@@ -402,6 +432,17 @@ async def command(data: dict = Body(...), repo=Depends(repository)):
     if action in {'olx_toggle', 'olx_delete', 'olx_scan'} and not await repo.get('olx_searches', payload.get('id', '')):
         raise HTTPException(404, 'Busca não encontrada.')
     return await repo.command(action, payload)
+
+
+@app.post('/api/commands/{identifier}/cancel')
+async def cancel_command(identifier: uuid.UUID, repo=Depends(repository)):
+    rows = await repo.request('PATCH', 'monitor_commands', params={
+        'owner_id': 'eq.' + repo.owner, 'id': 'eq.' + str(identifier), 'status': 'eq.pending',
+        'action': 'neq.component_delete'}, data={'status': 'failed', 'detail': 'Cancelado pelo usuário.', 'updated_at': utcnow()},
+        prefer='return=representation')
+    if not rows:
+        raise HTTPException(409, 'O pedido já foi recebido pelo PC ou não está mais na fila.')
+    return {'detail': 'Pedido cancelado. Ele não será executado pelo PC.'}
 
 
 @app.post('/api/worker/pull')

@@ -212,6 +212,78 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(self.repo.data['offers', old['id']]['pix'], 200000)
         self.assertEqual(self.repo.queued[-1]['action'], 'scan')
 
+    def test_cancel_is_atomic_owned_and_only_for_pending_commands(self):
+        identifier='00000000-0000-0000-0000-000000000001'
+        self.repo.request=AsyncMock(return_value=[{'id':identifier}])
+        response=self.client.post('/api/commands/'+identifier+'/cancel',json={})
+        self.assertEqual(response.status_code,200)
+        params=self.repo.request.call_args.kwargs['params']
+        self.assertEqual(params['owner_id'],'eq.owner-a')
+        self.assertEqual(params['status'],'eq.pending')
+        self.assertEqual(params['action'],'neq.component_delete')
+        self.repo.request=AsyncMock(return_value=[])
+        self.assertEqual(self.client.post('/api/commands/'+identifier+'/cancel',json={}).status_code,409)
+
+    def test_coupon_disabled_is_saved_online_without_pc_command(self):
+        self.repo.data['coupon_applications', 'VALIDO'] = {'code': 'VALIDO', 'status': 'inserted',
+            'detail': 'Adicionado', 'found_at': utcnow(), 'source': 'Telegram', 'attempts': 1}
+        for disabled, group in ((True, 'disabled'), (False, 'active')):
+            response = self.client.post('/api/commands', json={'action': 'coupon_disabled',
+                'payload': {'code': 'VALIDO', 'disabled': disabled}})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()['execution'], 'cloud')
+            self.assertEqual(self.client.get('/api/coupons').json()['applications'][0]['group'], group)
+        self.assertFalse(self.repo.queued)
+        self.assertEqual(self.repo.data['coupon_applications', 'VALIDO']['status'], 'inserted')
+
+    def test_coupon_disabled_override_survives_older_local_snapshot(self):
+        self.repo.data['coupon_applications', 'VALIDO'] = {'code': 'VALIDO', 'status': 'new',
+            'detail': '', 'found_at': utcnow(), 'source': 'Telegram', 'attempts': 0, 'disabled': False}
+        self.repo.data['overrides', 'coupon-disabled:VALIDO'] = {'code': 'VALIDO', 'disabled': True, 'found_at': utcnow()}
+        self.assertEqual(self.client.get('/api/coupons').json()['applications'][0]['group'], 'disabled')
+        self.repo.data['overrides', 'coupon-disabled:VALIDO']['found_at'] = (datetime.now(timezone.utc)-timedelta(days=2)).isoformat()
+        self.assertEqual(self.client.get('/api/coupons').json()['applications'][0]['group'], 'new')
+
+    def test_coupon_disable_refuses_foreign_old_or_invalid_code(self):
+        for payload,status in (({'code':'DESCONHECIDO','disabled':True},404),
+                               ({'code':'ABC','disabled':'yes'},422),({'code':'../ABC','disabled':True},422)):
+            response = self.client.post('/api/commands',json={'action':'coupon_disabled','payload':payload})
+            self.assertEqual(response.status_code,status)
+        self.assertFalse(self.repo.written)
+        self.assertFalse(self.repo.queued)
+
+    def test_session_commands_allow_only_browser_stores(self):
+        for name in ('Mercado Livre', 'Shopee'):
+            for action in ('session_open','session_confirm'):
+                response = self.client.post('/api/commands',json={'action':action,'payload':{'shop':name}})
+                self.assertEqual(response.status_code,200)
+                self.assertEqual(self.repo.queued[-1]['payload']['shop'],name)
+        self.assertEqual(self.client.post('/api/commands',json={'action':'session_open','payload':{'shop':'Pichau'}}).status_code,422)
+
+    def test_manual_cloud_stores_do_not_wait_for_one_another(self):
+        from cloud_protocol import CLOUD_SHOPS
+        self.repo.request = AsyncMock(return_value=True)
+        started=set();ready=asyncio.Event()
+        async def collect(collectors,repo,component,known,name,timeout):
+            started.add(name)
+            if len(started)==len(CLOUD_SHOPS):ready.set()
+            await asyncio.wait_for(ready.wait(),0.5)
+            return {'name':name,'count':1,'failures':0}
+        collectors=SimpleNamespace(close=AsyncMock())
+        with patch('cloud.app.collect_shop',side_effect=collect),patch('cloud.app.Shops',return_value=collectors):
+            response=self.client.post('/api/scan/1',json={})
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(started,set(CLOUD_SHOPS))
+        self.assertIn('4 leituras',response.json()['detail'])
+
+    def test_catalog_shows_five_minute_manual_cooldown(self):
+        original=self.repo.records;stamp=utcnow()
+        async def records(kind):
+            return [{'record_key':'1','data':{'started_at':stamp},'updated_at':stamp}] if kind=='scans' else await original(kind)
+        self.repo.records=records
+        next_at=self.client.get('/api/catalog').json()['scan_next_at']['1']
+        self.assertEqual(datetime.fromisoformat(next_at)-datetime.fromisoformat(stamp),timedelta(minutes=5))
+
     def test_duplicate_coupon_sources_keep_one_saved_application_state(self):
         import json
         coupon = {'code': 'SITETODO', 'shop': 'Mercado Livre', 'source': 'Pelando',
@@ -324,6 +396,41 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
     def tearDown(self):
         self.store.close()
         self.temp.cleanup()
+
+    async def test_session_open_and_confirm_reuse_owned_browser(self):
+        browser=SimpleNamespace(open_login=AsyncMock(),confirm=AsyncMock())
+        self.monitor.shops=SimpleNamespace(ml_browser=browser,shopee_browser=SimpleNamespace(open_login=AsyncMock()))
+        self.monitor.shop_status={}
+        self.store.save_component('Placa','custom','rtx 5060',None,None,'pix')
+        detail=await self.bridge.execute({'action':'session_open','payload':{'shop':'Mercado Livre'}})
+        browser.open_login.assert_awaited_once()
+        self.assertIn('feche essa janela',detail)
+        detail=await self.bridge.execute({'action':'session_confirm','payload':{'shop':'Mercado Livre'}})
+        browser.confirm.assert_awaited_once()
+        self.assertIn('Sessão confirmada',detail)
+        self.monitor.shops.shopee_browser.open_login.assert_not_awaited()
+        async with self.monitor.shop_lock:
+            with self.assertRaises(ValueError):
+                await self.bridge.execute({'action':'session_open','payload':{'shop':'Mercado Livre'}})
+
+    async def test_coupon_cloud_preference_applies_only_today(self):
+        calls=[]
+        self.monitor.ml_coupons=SimpleNamespace(set_disabled=lambda code,disabled:calls.append((code,disabled)))
+        self.bridge.apply_overrides([{'record_key':'coupon-disabled:VALIDO','data':{'code':'VALIDO','disabled':True,'found_at':utcnow()}},
+            {'record_key':'coupon-disabled:ANTIGO','data':{'code':'ANTIGO','disabled':True,
+               'found_at':(datetime.now(timezone.utc)-timedelta(days=2)).isoformat()}}],[])
+        self.assertEqual(calls,[('VALIDO',True)])
+
+    async def test_session_snapshot_contains_no_cookie_or_profile_path(self):
+        browser=SimpleNamespace(configured=True,login_open=False,status='Perfil salvo',cookies='PRIVATE_COOKIE',profile='PRIVATE_PATH')
+        self.monitor.shops=SimpleNamespace(ml_browser=browser,shopee_browser=browser)
+        self.monitor.telegram_status='Conectado';self.monitor.shop_status={}
+        self.monitor.ml_coupons=SimpleNamespace(status='Aguardando');self.monitor.olx=SimpleNamespace(status='Aguardando')
+        self.bridge.request=AsyncMock(return_value={})
+        await self.bridge.push(None,{'url':'https://panel.example'})
+        calls=str(self.bridge.request.call_args_list)
+        self.assertNotIn('PRIVATE_COOKIE',calls);self.assertNotIn('PRIVATE_PATH',calls)
+        self.assertIn('configured',calls)
 
     async def test_worker_scans_only_browser_sources_and_refuses_busy_execution(self):
         await self.bridge.execute({'action': 'scan', 'payload': {'component_id': 1}})

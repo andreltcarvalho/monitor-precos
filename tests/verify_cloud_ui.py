@@ -26,6 +26,7 @@ async def main():
     repo.data['coupon_applications','RECUPERAR']={'code':'RECUPERAR','status':'pending','detail':'Tivemos um problema','found_at':utcnow(),'attempts':1,'source':'Teste'}
     repo.data['coupon_applications','ATIVADO']={'code':'ATIVADO','status':'inserted','detail':'Adicionado','found_at':utcnow(),'attempts':1,'source':'Teste'}
     repo.data['settings','public_coupons']={'value':json.dumps([{'code':'NOVOCODIGO','shop':'Mercado Livre','source':'Pelando','conditions':'Informática','activation':False,'found_at':utcnow(),'checked_at':utcnow(),'url':'https://www.mercadolivre.com.br/cupons','source_url':'https://www.pelando.com.br/cupons-de-descontos/mercado-livre'}])}
+    repo.data['status','worker']={'name':'PC conectado','checked_at':utcnow(),'sessions':{'Mercado Livre':{'configured':True,'login_open':False,'detail':'Perfil salvo'}}}
     app.dependency_overrides[repository]=lambda:repo
     errors=[];requests=[]
     try:
@@ -59,6 +60,11 @@ async def main():
             assert await page.locator('.coupon-row').count()==1
             await page.locator('.coupon-conditions summary').click();assert await page.locator('.coupon-conditions').get_attribute('open') is not None
             await page.locator('#coupon-search').fill('RECUPERAR');assert await page.locator('.coupon-conditions').get_attribute('open') is not None
+            await page.locator('[data-action="coupon-disable"]').click();await page.wait_for_function('document.querySelector("#coupons-list").innerText.includes("Nenhum cupom")');
+            await page.locator('[data-action="coupon-filter"][data-state="disabled"]').click();assert await page.locator('.coupon-row').count()==1
+            await page.locator('.coupon-conditions summary').click();await page.locator('[data-action="coupon-disable"]').click()
+            await page.wait_for_function('document.querySelector("#coupons-list").innerText.includes("Nenhum cupom")');await page.locator('[data-action="coupon-filter"][data-state="failed"]').click()
+            assert not repo.queued,'Desativar/reativar não depende do PC'
             await page.locator('#coupon-retry').click();await page.wait_for_function('!document.querySelector("#coupon-retry").hasAttribute("aria-busy")');assert await page.locator('#coupon-retry').is_disabled()
             await page.locator('#navigation [data-tab="parts"]').click();await page.locator('[data-action="edit-part"]').click()
             await page.locator('#part-form [name="target_text"]').fill('1.950,00');await page.locator('#part-save').click()
@@ -67,6 +73,8 @@ async def main():
             assert await page.locator('.offer-card').count()==0
             assert 'Nenhuma oferta' in await page.locator('#offer-groups').inner_text()
             await page.go_back();assert await page.locator('#parts').is_visible()
+            await page.locator('#navigation [data-tab="sources"]').click();await page.wait_for_function('document.querySelector("#shops-list").getAttribute("aria-busy")===null')
+            session=page.locator('.session-controls[data-shop="Mercado Livre"]');await session.locator('summary').click();await session.locator('[data-action="session-open"]').click();await page.wait_for_function('document.querySelector("[data-action=session-open]").disabled');assert repo.queued[-1]['action']=='session_open'
             await page.set_viewport_size({'width':1024,'height':900});assert not await page.evaluate('document.documentElement.scrollWidth>innerWidth')
             assert not errors,errors
             await browser.close()

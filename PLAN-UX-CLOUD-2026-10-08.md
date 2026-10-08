@@ -20,7 +20,15 @@ Auditar o uso real após a primeira publicação. Resolver os maiores atritos ob
 - [x] Auditoria inicial do painel publicado e contratos existentes.
 - [x] Implementação da primeira rodada.
 - [x] 509 testes Python, regressões JS e Chrome/ASGI aprovados; imagens com dados reais em 1440/1024, sem erros JS ou overflow. Detector sem findings (aviso do caminho virtual /assets, CSS também lido como alvo).
-- [ ] Publicação e verificação autenticada.
+- [x] Rodada 1 publicada em fe18012. Conferência real da KaBuM na nuvem atualizou horário/preço; API de cupons confirma estados únicos por código.
 - [ ] Revisão dos próximos atritos com evidências.
 
 A coleta local estava indisponível em /health durante a validação. Consultas de lojas na Vercel: KaBuM retorna leituras; Pichau/Amazon/Terabyte falham na execução agendada. A interface agora evidencia esses estados.
+
+## Rodada 2 — autonomia e recuperação
+- Estado desativado/reativado de cupom salvo imediatamente na nuvem e sincronizado como preferência; aplicação continua no Chrome local.
+- Fontes recupera Abrir/Confirmar sessão de Mercado Livre e Shopee, com comandos validados e estado mínimo do perfil, sem exportar cookies.
+- Consultas HTTP independentes e leituras da API concorrentes; resultados informam falhas e cooldown manual.
+- Testes isolados de API/ponte/UI, migração restrita à lista de comandos, revisão RLS e validação em produção.
+
+Rodada 2 validada: 50 testes cloud + JS + Chrome/ASGI aprovados; controles de sessão, preferência de cupom e cancelamento pendente cobertos. Migração `monitor_browser_session_commands` aplicada pelo plugin após teste revertido; RLS ativo e acesso anônimo recusado. Aviso Auth de proteção contra senhas vazadas é anterior e não pertence a essa migração. Coletor local iniciado: /health 200/running e raiz 307 para painel único.

@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from cloud_protocol import CLOUD_SHOPS, LOCAL_SHOPS, PUBLIC_SETTINGS, offer_key
-from core import canonical_url, price_is_current, utcnow
+from core import canonical_url, coupon_is_today, price_is_current, utcnow
 from credentials import crypt, protect_data_dir
 
 FIELDS = {
@@ -117,6 +117,8 @@ class CloudSync:
                 store.save_component(value['name'], value['kind'], value['query'], value.get('capacity_gb'),
                     value.get('target'), value.get('target_payment', 'pix'), identifier, value.get('ignored_brands', []))
                 store.toggle('components', identifier, bool(value.get('enabled', 1)))
+            elif key.startswith('coupon-disabled:') and coupon_is_today(value.get('found_at')):
+                self.monitor.ml_coupons.set_disabled(value['code'], bool(value['disabled']))
             elif key in PUBLIC_SETTINGS and key.startswith('shop:'):
                 store.set_setting(key, value['value'])
         mapped = {offer_key(o['component_id'], o['url']): o['id'] for o in store.offers()}
@@ -158,6 +160,22 @@ class CloudSync:
             if not row:
                 raise ValueError('Oferta não encontrada no PC; aguarde a sincronização.')
             await monitor.check_offer(row['id'])
+        elif action in {'session_open', 'session_confirm'}:
+            shop = value.get('shop')
+            if shop not in LOCAL_SHOPS:
+                raise ValueError('Loja sem sessão local gerenciável.')
+            if monitor.shop_lock.locked():
+                raise ValueError('Outra consulta está em andamento. Aguarde antes de alterar a sessão.')
+            browser = monitor.shops.ml_browser if shop == 'Mercado Livre' else monitor.shops.shopee_browser
+            if action == 'session_open':
+                await browser.open_login()
+                return 'Chrome aberto no PC. Entre na conta, feche essa janela e confirme a sessão em Fontes.'
+            component = next((part for part in store.components() if part['enabled']), None)
+            if not component:
+                raise ValueError('Ative uma peça para testar a sessão.')
+            await browser.confirm(component)
+            monitor.shop_status[shop] = 'Sessão salva · aguardando consulta'
+            return 'Sessão confirmada para ' + shop + '. Atualize uma peça para consultar as ofertas.'
         elif action in {'coupon_batch', 'coupon_retry'}:
             await monitor.ml_coupons.run(retry_only=action == 'coupon_retry', code=value.get('code'))
         elif action == 'coupon_disabled':
@@ -199,8 +217,8 @@ class CloudSync:
                 result = await self.request(client, credentials, 'POST', '/api/worker/claim', {})
                 for command in result['commands']:
                     try:
-                        await self.execute(command)
-                        answer = {'status': 'done', 'detail': 'Pedido processado no PC. Confira os resultados na aba correspondente.'}
+                        detail = await self.execute(command)
+                        answer = {'status': 'done', 'detail': detail or 'Pedido processado no PC. Confira os resultados na aba correspondente.'}
                     except asyncio.CancelledError:
                         raise
                     except Exception as exc:
@@ -214,7 +232,9 @@ class CloudSync:
         rows.append({'kind': 'status', 'record_key': 'worker', 'data': {
             'name': 'PC conectado', 'checked_at': utcnow(), 'telegram': self.monitor.telegram_status,
             'coupons': self.monitor.ml_coupons.status, 'shops': self.monitor.shop_status,
-            'olx': self.monitor.olx.status}})
+            'olx': self.monitor.olx.status, 'sessions': {name: {'configured': browser.configured,
+                'login_open': browser.login_open, 'detail': browser.status}
+                for name, browser in [('Mercado Livre', self.monitor.shops.ml_browser), ('Shopee', self.monitor.shops.shopee_browser)]}}})
         changed = []
         for row in rows:
             identity = (row['kind'], row['record_key'])

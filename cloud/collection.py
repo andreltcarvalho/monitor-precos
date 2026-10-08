@@ -7,6 +7,18 @@ from core import canonical_url, detect_brand, effective_price, reading_valid_unt
 from cloud_protocol import offer_key
 
 
+def failure_reason(error):
+    if isinstance(error, (TimeoutError, httpx.TimeoutException)):
+        return 'A loja excedeu o tempo da consulta.'
+    if isinstance(error, httpx.HTTPStatusError):
+        return 'A loja retornou HTTP ' + str(error.response.status_code) + '.'
+    if isinstance(error, httpx.HTTPError):
+        return 'Não foi possível estabelecer a conexão com a loja.'
+    # ValueErrors são mensagens do coletor; não devolver URLs, HTML ou rastros de transporte.
+    text = str(error)
+    return text[:250] if 'http' not in text.lower() else 'A página não permitiu uma leitura confirmada.'
+
+
 async def check_offer(collectors, repo, part, old, timeout=60):
     """Confere uma oferta HTTP sem enfileirar trabalho no PC."""
     try:
@@ -30,7 +42,7 @@ async def check_offer(collectors, repo, part, old, timeout=60):
 
 
 async def collect_shop(collectors, repo, part, known, name, timeout=120):
-    count, failures = 0, 0
+    count, failures, reasons = 0, 0, []
     try:
         async with asyncio.timeout(timeout):
             candidates = await collectors.discover(name, part)
@@ -58,16 +70,18 @@ async def collect_shop(collectors, repo, part, known, name, timeout=120):
                         {'kind': 'observations', 'record_key': key + ':' + stamp, 'data': observation}])
                     known[:] = [o for o in known if o['id'] != key] + [row]
                     count += 1
-                except (httpx.HTTPError, ValueError):
+                except (httpx.HTTPError, ValueError) as exc:
                     failures += 1
+                    reasons.append(failure_reason(exc))
                     if old:
                         await repo.put('offers', old['id'], dict(old, valid_until=None, status='Falha na revalidação · anúncio preservado'))
-    except (ValueError, httpx.HTTPError, TimeoutError):
+    except (ValueError, httpx.HTTPError, TimeoutError) as exc:
         failures += 1
+        reasons.append(failure_reason(exc))
     detail = f'{count} ofertas consultadas' + (' · algumas leituras falharam' if failures else '')
     if not count and failures:
         detail = 'Consulta bloqueada, indisponível ou sem anúncios legíveis; histórico preservado.'
-    status = {'name': name, 'component_id': part['id'], 'count': count, 'failures': failures, 'detail': detail, 'checked_at': utcnow()}
+    status = {'name': name, 'component_id': part['id'], 'count': count, 'failures': failures, 'detail': detail, 'reason': next(iter(reasons), ''), 'checked_at': utcnow()}
     await repo.put('status', 'cloud:' + name + ':' + str(part['id']), status)
     return status
 

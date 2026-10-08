@@ -72,4 +72,6 @@ assert.match(chart,/<details class="disclosure history-records">/);
 assert.match(chart,/<circle[^>]*><title>05\/10\/2026:/);
 run("state.catalog.components=[{id:1,name:'GPU',query:'rtx',enabled:true,ignored_brands:'[]'}];renderParts()");
 assert.doesNotMatch(node('#parts-list').innerHTML,/ · Ignorar/);
+run("state.catalog.scan_next_at={'1':new Date(Date.now()+120000).toISOString()};state.catalog.groups[0].enabled=true;state.catalog.components=[];renderOffers()");
+assert.match(node('#offer-groups').innerHTML,/Atualizar em [12] min/);
 console.log('Cloud UI: catalogue, payment, coupon states, batch guards and history gaps passed.');

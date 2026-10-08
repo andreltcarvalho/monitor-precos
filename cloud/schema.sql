@@ -16,7 +16,7 @@ revoke all on public.monitor_records from anon;
 create table public.monitor_commands (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references auth.users(id) on delete cascade,
-  action text not null check (action in ('scan','check','coupon_batch','coupon_retry','coupon_disabled','component_delete','source_save','source_toggle','source_delete','olx_save','olx_toggle','olx_delete','olx_scan')),
+  action text not null check (action in ('scan','check','coupon_batch','coupon_retry','coupon_disabled','component_delete','source_save','source_toggle','source_delete','olx_save','olx_toggle','olx_delete','olx_scan','session_open','session_confirm')),
   payload jsonb not null default '{}',
   status text not null default 'pending' check (status in ('pending','running','done','failed')),
   detail text not null default '',
