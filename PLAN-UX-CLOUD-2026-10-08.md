@@ -53,3 +53,8 @@ Rodada 6 publicada em 633bdce: os históricos das três peças preservaram exata
 
 ## Rodada 7 — comparação e conexão
 Barra de comparação com progresso e diálogo sob demanda; leitura e links de cada oferta explícitos. Timeout por tipo de operação e erro de rede legível, distinguindo resultado incerto; expiração da sessão fecha diálogos. Testes JS de timeout/rede e Chrome/ASGI de seleção, foco, fechamento e sessão expirada aprovados; captura real da comparação sem erro/overflow.
+
+## Rodada 8 — descoberta periódica de cupons na nuvem
+Compartilhar a coleta pública entre botão e endpoint agendado; Supabase Cron/pg_net usa o Vault existente a cada hora, sem Vercel Cron nem JWT administrativo. Cache privado por conta, cooldown compartilhado com o botão, fontes independentes e resposta antiga não sobrescreve atualização manual. Ativação ML permanece no PC. Validar API, função SQL com fixtures revertidas, deploy e execução real antes de habilitar o cron.
+
+Rodada 8: 529 testes Python, dois testes JS e Chrome/ASGI aprovados. Migração aplicada pelo plugin Supabase; fixture SQL real confirmou cache, conta, timeout, atomicidade, leitura manual e cooldown, com 0 usuários de teste restantes. Habilitar e verificar coleta real após o deploy.

@@ -7,7 +7,8 @@ from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 
 from cloud.app import app
-from cloud.collection import collect_shop, ScheduledReadings
+from cloud.collection import collect_shop, collect_public_coupons, ScheduledReadings
+from core import utcnow
 from cloud_protocol import offer_key
 from test_cloud import offer, part
 
@@ -60,6 +61,46 @@ class ScheduledApiTests(unittest.TestCase):
         collectors.close.assert_awaited_once()
 
 
+class ScheduledCouponTests(unittest.TestCase):
+    def setUp(self):
+        self.env = patch.dict(os.environ, {'MONITOR_CRON_SECRET': 'test-cron-secret'})
+        self.env.start()
+        self.client = TestClient(app)
+        self.headers = {'Authorization': 'Bearer test-cron-secret'}
+
+    def tearDown(self):
+        self.client.close()
+        self.env.stop()
+
+    def test_cron_coupon_requires_its_own_secret_before_collecting(self):
+        with patch('cloud.app.Shops') as collectors:
+            self.assertEqual(self.client.post('/api/scheduled/coupons', json={'coupons': []}).status_code, 401)
+            self.assertEqual(self.client.post('/api/scheduled/coupons', headers={'Authorization':'Bearer user-jwt'}, json={'coupons': []}).status_code, 401)
+        collectors.assert_not_called()
+
+    def test_cron_coupon_rejects_unknown_source_and_oversized_cache(self):
+        with patch('cloud.app.Shops') as collectors:
+            for rows in ([{'source':'arbitrary','code':'CODE'}], [{'source':'Pelando'}]*501, ['invalid']):
+                self.assertEqual(self.client.post('/api/scheduled/coupons', headers=self.headers, json={'coupons': rows}).status_code, 422)
+        collectors.assert_not_called()
+
+    def test_cron_coupon_partial_success_preserves_today_cache_only(self):
+        today = {'code':'OLD','source':'Pelando','shop':'Mercado Livre','found_at':utcnow()}
+        yesterday = dict(today,code='YESTERDAY',found_at='2020-01-01T10:00:00+00:00')
+        async def source(name):
+            if name=='Pelando': raise ValueError('Bloqueada')
+            return [{'code':'NEW','shop':'KaBuM','url':'https://www.kabum.com.br'}]
+        collectors=SimpleNamespace(coupon_list=AsyncMock(return_value=[]), public_coupon_source=AsyncMock(side_effect=source),close=AsyncMock())
+        with patch('cloud.app.Shops', return_value=collectors):
+            result=self.client.post('/api/scheduled/coupons', headers=self.headers, json={'coupons':[today,yesterday]})
+        self.assertEqual(result.status_code,200)
+        body=result.json()
+        self.assertEqual({row['code'] for row in body['coupons']},{'OLD','NEW'})
+        self.assertEqual(next(row for row in body['status'] if row['source']=='Pelando')['failures'],1)
+        self.assertNotIn('owner_id',str(body))
+        collectors.close.assert_awaited_once()
+
+
 class ScheduledCollectionTests(unittest.IsolatedAsyncioTestCase):
     async def test_hidden_and_known_above_twelfth_not_consulted(self):
         known = [offer(i, 200000+i*1000) for i in range(14)]
@@ -101,6 +142,17 @@ class ScheduledCollectionTests(unittest.IsolatedAsyncioTestCase):
         status = await collect_shop(collector, repo, part(), [], 'Pichau', timeout=0.02)
         self.assertEqual((status['count'], status['failures']), (1, 1))
         self.assertEqual(sum(kind == 'observations' for kind, key in repo.written), 1)
+
+
+class PublicCouponCollectionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_timeout_in_one_source_does_not_lose_another(self):
+        async def source(name):
+            if name=='Pelando': await asyncio.sleep(1)
+            return [{'code':'WORKED','shop':'KaBuM'}]
+        collectors=SimpleNamespace(coupon_list=AsyncMock(return_value=[]),public_coupon_source=source)
+        result=await collect_public_coupons(collectors,[],timeout=.01)
+        self.assertEqual([row['code'] for row in result['coupons']],['WORKED'])
+        self.assertEqual(next(row for row in result['status'] if row['source']=='Pelando')['failures'],1)
 
 
 if __name__ == '__main__':

@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from cloud.repository import Repository, configuration, user_session
-from cloud.collection import collect_shop, check_offer, failure_reason, ScheduledReadings
+from cloud.collection import collect_shop, check_offer, collect_public_coupons, ScheduledReadings
 from cloud_protocol import CLOUD_SHOPS, LOCAL_SHOPS, PUBLIC_SETTINGS, SYNC_KINDS, catalog, offer_key
 from core import BRAND_ALIASES, canonical_url, confirmed_price, coupon_is_today, detect_brand, effective_price, matches, offer_matches, price_is_current, reading_valid_until, top_offers, tracking_price, utcnow, valid_url
 from forms import component_input_errors
@@ -307,8 +307,10 @@ async def get_coupons(repo=Depends(repository)):
             continue
         coupons.append({'code': row['code'], 'shop': 'Mercado Livre', 'source': row.get('source'),
                         'stamp': row.get('found_at'), 'conditions': '', 'url': ''})
-    status = [row for row in await values(repo, 'status') if row.get('coupon_source')]
-    return {'coupons': coupons, 'applications': ml, 'collection_status': status}
+    status = await values(repo, 'status')
+    return {'coupons': coupons, 'applications': ml,
+            'collection_status': [row for row in status if row.get('coupon_source')],
+            'schedule': next((row for row in status if row.get('coupon_schedule')), None)}
 
 
 @app.post('/api/coupons/refresh')
@@ -318,28 +320,12 @@ async def refresh_coupons(repo=Depends(repository)):
     old = await repo.get('settings', 'cloud_coupon_feed') or {'value': '[]'}
     previous = json.loads(old['value'])
     collectors = Shops()
-    async def collect(name):
-        cached = [item for item in previous if item.get('source') == name]
-        try:
-            async with asyncio.timeout(30):
-                items = await collectors.coupon_list() if name == 'Pichau' else await collectors.public_coupon_source(name)
-            for item in items:
-                prior = next((row for row in cached if row.get('code') == item.get('code') and row.get('url') == item.get('url')), {})
-                item.update(source=name, shop=item.get('shop') or name,
-                            found_at=item.get('found_at') or prior.get('found_at') or utcnow(), checked_at=utcnow())
-            status = {'source': name, 'count': len(items), 'failures': 0, 'detail': f'{len(items)} cupons consultados.'}
-        except (httpx.HTTPError, ValueError, TimeoutError) as error:
-            items = cached
-            status = {'source': name, 'count': 0, 'failures': 1,
-                      'detail': failure_reason(error) + ' Última leitura preservada.'}
-        status.update(coupon_source=True, checked_at=utcnow())
-        await repo.put('status', 'cloud:coupons:' + name, status)
-        return items, status
     try:
-        results = await asyncio.gather(*(collect(name) for name in ('Pichau', 'Melhores Cartões', 'Pelando')))
-        items = [item for rows, _ in results for item in rows if coupon_is_today(item.get('found_at'))]
-        await repo.put('settings', 'cloud_coupon_feed', {'value': json.dumps(items, ensure_ascii=False)})
-        return {'status': [status for _, status in results]}
+        result = await collect_public_coupons(collectors, previous)
+        await repo.put_many([{'kind': 'status', 'record_key': 'cloud:coupons:' + row['source'], 'data': row}
+                             for row in result['status']] + [{'kind': 'settings', 'record_key': 'cloud_coupon_feed',
+                             'data': {'value': json.dumps(result['coupons'], ensure_ascii=False)}}])
+        return {'status': result['status']}
     finally:
         await collectors.close()
 
@@ -373,13 +359,32 @@ async def scan(identifier: int, repo=Depends(repository)):
     return {'status': statuses, 'detail': detail}
 
 
-@app.post('/api/scheduled/collect')
-async def scheduled_collect(request: Request, data: dict = Body(...)):
+def authorize_schedule(request):
     secret = os.environ.get('MONITOR_CRON_SECRET', '')
     if not secret:
         raise HTTPException(503, 'Agendamento ainda não configurado.')
     if not secrets.compare_digest(request.headers.get('authorization', ''), 'Bearer ' + secret):
         raise HTTPException(401, 'Agendamento não autorizado.')
+
+
+@app.post('/api/scheduled/coupons')
+async def scheduled_coupons(request: Request, data: dict = Body(...)):
+    authorize_schedule(request)
+    previous = data.get('coupons')
+    if (not isinstance(previous, list) or len(previous) > 500
+            or any(not isinstance(row, dict) or row.get('source') not in {'Pichau', 'Melhores Cartões', 'Pelando'}
+                   or not isinstance(row.get('code', ''), str) or len(row.get('code', '')) > 100 for row in previous)):
+        raise HTTPException(422, 'Lote de cupons inválido.')
+    collectors = Shops()
+    try:
+        return await collect_public_coupons(collectors, previous)
+    finally:
+        await collectors.close()
+
+
+@app.post('/api/scheduled/collect')
+async def scheduled_collect(request: Request, data: dict = Body(...)):
+    authorize_schedule(request)
     part, known, name = data.get('component'), data.get('offers'), data.get('shop')
     if (not isinstance(part, dict) or type(part.get('id')) is not int or not part.get('enabled')
             or part.get('kind') not in {'custom', 'gpu', 'psu', 'ssd'} or not isinstance(part.get('query'), str)

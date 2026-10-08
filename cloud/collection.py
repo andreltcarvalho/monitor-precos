@@ -3,7 +3,7 @@ import asyncio
 
 import httpx
 
-from core import canonical_url, detect_brand, effective_price, reading_valid_until, top_offers, tracking_price, utcnow
+from core import canonical_url, coupon_is_today, detect_brand, effective_price, reading_valid_until, top_offers, tracking_price, utcnow
 from cloud_protocol import offer_key
 
 
@@ -84,6 +84,32 @@ async def collect_shop(collectors, repo, part, known, name, timeout=120):
     status = {'name': name, 'component_id': part['id'], 'count': count, 'failures': failures, 'detail': detail, 'reason': next(iter(reasons), ''), 'checked_at': utcnow()}
     await repo.put('status', 'cloud:' + name + ':' + str(part['id']), status)
     return status
+
+
+PUBLIC_COUPON_SOURCES = ('Pichau', 'Melhores Cartões', 'Pelando')
+
+
+async def collect_public_coupons(collectors, previous, timeout=30):
+    """Cada fonte falha isoladamente; preservar só os códigos encontrados hoje."""
+    async def collect(name):
+        cached = [item for item in previous if item.get('source') == name]
+        try:
+            async with asyncio.timeout(timeout):
+                items = await collectors.coupon_list() if name == 'Pichau' else await collectors.public_coupon_source(name)
+            for item in items:
+                prior = next((row for row in cached if row.get('code') == item.get('code') and row.get('url') == item.get('url')), {})
+                item.update(source=name, shop=item.get('shop') or name,
+                            found_at=item.get('found_at') or prior.get('found_at') or utcnow(), checked_at=utcnow())
+            status = {'source': name, 'count': len(items), 'failures': 0, 'detail': f'{len(items)} cupons consultados.'}
+        except (httpx.HTTPError, ValueError, TimeoutError) as error:
+            items = cached
+            status = {'source': name, 'count': 0, 'failures': 1,
+                      'detail': failure_reason(error) + ' Última leitura preservada.'}
+        status.update(coupon_source=True, checked_at=utcnow())
+        return items, status
+    results = await asyncio.gather(*(collect(name) for name in PUBLIC_COUPON_SOURCES))
+    return {'coupons': [item for rows, _ in results for item in rows if coupon_is_today(item.get('found_at'))],
+            'status': [status for _, status in results]}
 
 
 class ScheduledReadings:

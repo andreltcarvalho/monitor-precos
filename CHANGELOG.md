@@ -157,3 +157,8 @@ Consulta as leituras da peça e do período diretamente no Supabase, mantendo RL
 ### Comparação e conexão
 - Seleção de até três ofertas fica acessível em barra discreta; tabela de pagamentos, cupons e conferência abre em diálogo, com links de compra e foco devolvido ao fechar.
 - Requisições têm prazo adequado ao tipo de consulta, erro de conexão em português e mensagem de resultado incerto para operações sem resposta. Sessão expirada fecha os diálogos e permite entrar novamente.
+
+### 08/10/2026 — descoberta horária de cupons públicos
+- Coleta na nuvem compartilhada pelo botão e pelo Supabase Cron; fontes independentes e cache por conta.
+- Agendamento privado reaproveita Vault, evita lotes duplicados e não sobrescreve uma leitura manual posterior.
+- Painel informa a execução automática sem misturar descoberta com ativação no Chrome.

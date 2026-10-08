@@ -206,6 +206,9 @@ async function loadSources() {
 async function loadCoupons() {const first=!state.coupons;state.coupons=await api('/api/coupons');const shops=[...new Set(state.coupons.coupons.map(c=>c.shop))].sort();options($('#coupon-shop'),shops,'Todas');if(first&&shops.includes('Mercado Livre'))$('#coupon-shop').value='Mercado Livre';renderCoupons();}
 function renderCoupons() {
   if(!state.coupons)return;
+  const schedule=state.coupons.schedule;
+  $('#coupon-schedule').hidden=!schedule;
+  if(schedule)$('#coupon-schedule').textContent=schedule.state==='running'?'Buscando cupons públicos na nuvem…':`Busca pública automática a cada hora, mesmo com o PC desligado. ${schedule.state==='failed'?'Última tentativa falhou; os resultados anteriores foram preservados.':'Última busca '+age(schedule.checked_at)+'.'}`;
   const statuses=state.coupons.collection_status||[];
   $('#coupon-collection').hidden=!statuses.length;
   $('#coupon-collection-status').innerHTML=statuses.map(row=>`<p><strong>${escapeHtml(row.source)}</strong>: ${escapeHtml(row.detail)} <span class="muted">· ${time(row.checked_at)}</span></p>`).join('');
