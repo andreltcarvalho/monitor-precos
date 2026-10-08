@@ -106,3 +106,8 @@ Rodada 16: 68 testes cloud e 50 testes core aprovados; JS e Chrome/ASGI confirma
 Preservar foco e detalhes nas listas de Fontes/OLX; ler disclosures após a resposta, não antes. Ignorar respostas antigas de Fontes/OLX. Atualização automática não sobrepõe edição, diálogo, operação ativa ou outra atualização; segue a aba que iniciou a consulta. Validar concorrência, rascunho, foco e disclosures no Chrome.
 
 Rodada 17: teste JS de respostas fora de ordem e atualização concorrente aprovado; Chrome/ASGI abriu uma sessão durante resposta lenta e preservou disclosure/foco, além das datas abertas de anúncio OLX. Atualização automática pausa durante formulário, diálogo ou operação ativa.
+
+## Rodada 18 — sessão e ordenação coerentes
+Invalidar respostas de catálogo/cupons ao sair ou trocar de sessão; limpar seleção e paginação da conta. Ordenar ofertas salvas pelo valor efetivamente exibido, sem depender de preço auxiliar que possa conter cupom antigo. Validar respostas atrasadas e cupom vencido em JS e regressões Chrome.
+
+Rodada 18: cinco suítes JS e Chrome/ASGI aprovados. Teste de saída/troca de sessão confirmou que respostas atrasadas não repõem catálogo/cupons; ordenação usa o preço mostrado. Produção da rodada 17: sete páginas sem erros JS/HTTP/overflow.

@@ -207,3 +207,7 @@ Consulta as leituras da peça e do período diretamente no Supabase, mantendo RL
 ### Atualizações que preservam a interação
 - Fontes e OLX mantêm os detalhes abertos e o foco; respostas antigas não substituem consultas recentes.
 - A atualização automática aguarda formulários, diálogos e operações em andamento e não cria consultas concorrentes.
+
+### Sessão e preços salvos
+- Sair da conta invalida leituras pendentes de catálogo/cupons e limpa a seleção/paginação.
+- Ordenação das ofertas salvas acompanha o preço mostrado, desconsiderando cupom vencido.

@@ -5,13 +5,13 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'
 const currency = value => value == null ? 'Não informado' : (value / 100).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
 const time = stamp => stamp && !Number.isNaN(Date.parse(stamp)) ? new Date(stamp).toLocaleString('pt-BR', {timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : 'Não informado';
 const safeLink = url => { try {const u=new URL(url); return u.protocol==='https:' && !u.username && !u.password ? u.href : ''; } catch {return '';} };
-const state = {tab:'offers', catalog:null, offers:new Map(), comparison:[], busy:new Set(), session:null, coupons:null, pages:new Map(), activeGroup:null,historyRequest:0,couponPage:0,activityPage:0,activityFilter:null,pendingFavorites:new Set(),used:null,usedPages:new Map(),catalogExpiry:Infinity,detailId:null,sourcesRequest:0,usedRequest:0,polling:false};
+const state = {tab:'offers', catalog:null, offers:new Map(), comparison:[], busy:new Set(), session:null, coupons:null, pages:new Map(), activeGroup:null,historyRequest:0,couponPage:0,activityPage:0,activityFilter:null,pendingFavorites:new Set(),used:null,usedPages:new Map(),catalogExpiry:Infinity,detailId:null,sourcesRequest:0,usedRequest:0,catalogRequest:0,couponsRequest:0,polling:false};
 const icon = path => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg>`;
 const star = icon('m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z');
 const tabIcons={offers:'M4 6h16v14H4ZM8 6V4h8v2M8 10h8M8 14h5',parts:'M7 7h10v10H7ZM9 3v4m6-4v4M9 17v4m6-4v4M3 9h4m-4 6h4m10-6h4m-4 6h4',coupons:'M4 6h16v4a2 2 0 0 0 0 4v4H4v-4a2 2 0 0 0 0-4ZM13 6v3m0 3v1m0 3v2',history:'M4 4v16h16M7 15l4-4 4 2 5-7',used:'M4 10l8-6 8 6v10H4ZM9 20v-6h6v6',sources:'M12 12V5M5 19v-6h14v6M9 5h6M2 19h6m8 0h6',activity:'M3 12h4l3-7 4 14 3-7h4'};
 let noticeTimer,refreshPromise;
 function notice(message) { $('#notice-message').textContent=message; $('#notice').hidden=false; clearTimeout(noticeTimer); noticeTimer=setTimeout(()=>$('#notice').hidden=true,9000); }
-function signedOut() {$$('dialog[open]').forEach(dialog=>dialog.close());$('#boot').hidden=true; $('#workspace').hidden=true; $('#login').hidden=false; state.session=null;state.catalog=null;state.offers.clear();state.coupons=null;state.used=null;state.comparison=[];state.historyRequest++;state.sourcesRequest++;state.usedRequest++; }
+function signedOut() {$$('dialog[open]').forEach(dialog=>dialog.close());$('#boot').hidden=true; $('#workspace').hidden=true; $('#login').hidden=false; state.session=null;state.catalog=null;state.offers.clear();state.coupons=null;state.used=null;state.comparison=[];state.historyRequest++;state.sourcesRequest++;state.usedRequest++;state.catalogRequest++;state.couponsRequest++;state.pages.clear();state.usedPages.clear();state.couponPage=0;state.activityPage=0;state.activityFilter=null;state.detailId=null; }
 async function apiFetch(path, options, timeout=30000) {
   try {return await fetch(path,{...options,signal:AbortSignal.timeout(timeout)});}
   catch(error) {
@@ -50,8 +50,10 @@ async function start() {
   } catch(error) {if(!state.session){signedOut();$('#login-message').textContent=error.message;}else loadError('offer-groups',error);}
 }
 async function reloadCatalog() {
-  const initial=!state.catalog;
-  state.catalog=await api('/api/catalog');state.offers.clear();
+  const request=++state.catalogRequest,session=state.session,initial=!state.catalog;let body;
+  try{body=await api('/api/catalog');}catch(error){if(request===state.catalogRequest&&state.session===session&&session)throw error;return;}
+  if(request!==state.catalogRequest||state.session!==session||!session)return;
+  state.catalog=body;state.offers.clear();
   for(const row of state.catalog.offers)state.offers.set(row.id,row);
   for(const group of state.catalog.groups)for(const row of group.offers)state.offers.set(row.id,row);
   state.catalogExpiry=nextPriceExpiry();
@@ -155,7 +157,7 @@ async function saveFavorite(id) {
 function offerRows(group) {
   const selection=$('#offer-selection').value;
   const rows=selection?[...state.offers.values()].filter(row=>row.component_id===group.id&&row[selection]):currentOffers(group);
-  return rows.filter(filtered).sort((a,b)=>(a.effective??offerPrice(a).amount??Infinity)-(b.effective??offerPrice(b).amount??Infinity)).slice(0,12);
+  return rows.filter(filtered).sort((a,b)=>(offerPrice(a).amount??Infinity)-(offerPrice(b).amount??Infinity)).slice(0,12);
 }
 function renderOffers() {
   if(!state.catalog)return;
@@ -269,7 +271,7 @@ async function loadSources() {
   restoreShops();restoreGroups();
 }
 
-async function loadCoupons() {const first=!state.coupons;state.coupons=await api('/api/coupons');const shops=[...new Set(state.coupons.coupons.map(c=>c.shop))].sort();options($('#coupon-shop'),shops,'Todas');if(first&&shops.includes('Mercado Livre'))$('#coupon-shop').value='Mercado Livre';renderCoupons();}
+async function loadCoupons() {const request=++state.couponsRequest,session=state.session,first=!state.coupons;let body;try{body=await api('/api/coupons');}catch(error){if(request===state.couponsRequest&&state.session===session&&session)throw error;return;}if(request!==state.couponsRequest||state.session!==session||!session)return;state.coupons=body;const shops=[...new Set(state.coupons.coupons.map(c=>c.shop))].sort();options($('#coupon-shop'),shops,'Todas');if(first&&shops.includes('Mercado Livre'))$('#coupon-shop').value='Mercado Livre';renderCoupons();}
 function renderCoupons() {
   if(!state.coupons)return;
   const schedule=state.coupons.schedule;

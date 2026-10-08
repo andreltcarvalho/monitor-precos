@@ -148,3 +148,9 @@ assert.ok(run('state.catalogExpiry>Date.now()'));
 run(`state.offers.get('expired').favorite=true;`);node('#offer-selection').value='favorite';run('renderOffers();');
 assert.match(node('#offer-groups').innerHTML,/Precisa conferir/);
 console.log('Price validity: expired catalogue data disappears without a response; saved prices stay explicit.');
+
+// A stored auxiliary price cannot rank an expired coupon ahead of the displayed amount.
+run(`state.offers=new Map([['cheap',{id:'cheap',component_id:1,title:'Atual',shop:'Pichau',pix:200000,favorite:true,valid_until:new Date(Date.now()+60000).toISOString()}],['old',{id:'old',component_id:1,title:'Cupom vencido',shop:'Mercado Livre',announced:300000,coupon_price:100000,effective:100000,favorite:true,valid_until:'2000-01-01T00:00:00Z'}]]);`);
+node('#offer-selection').value='favorite';
+assert.equal(run('offerRows({id:1,offers:[]})[0].id'),'cheap');
+console.log('Saved offer order follows the displayed price, including coupon expiration.');
