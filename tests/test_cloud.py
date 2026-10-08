@@ -126,6 +126,15 @@ class ApiTests(unittest.TestCase):
         self.client.post('/api/commands',json={'action':'olx_scan','payload':{'id':3}})
         self.assertEqual(self.repo.queued[-1]['payload']['label'],'Placa em Piracicaba')
 
+    def test_olx_save_payload_remains_accepted_by_local_parser(self):
+        from olx import search_input
+        draft={'name':'Placa local','mode':'fields','url':'','query':'rtx 5060','state':'SP','city':'Piracicaba','target':'2800','excluded':'quebrada','label':'campo extra'}
+        result=self.client.post('/api/commands',json={'action':'olx_save','payload':draft})
+        self.assertEqual(result.status_code,200)
+        payload=self.repo.queued[-1]['payload']
+        self.assertNotIn('label',payload)
+        self.assertEqual(search_input(**payload)['name'],'Placa local')
+
     def test_component_delete_preserves_name_for_activity_after_removal(self):
         self.assertEqual(self.client.delete('/api/components/1').status_code,200)
         self.assertEqual(self.repo.queued[-1]['payload']['label'],part()['name'])

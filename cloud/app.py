@@ -455,8 +455,6 @@ async def command(data: dict = Body(...), repo=Depends(repository)):
         if not saved:
             raise HTTPException(404, 'Fonte não encontrada.' if kind == 'sources' else 'Busca não encontrada.')
         payload['label'] = str(saved.get('name', ''))[:120]
-    if action in {'source_save', 'olx_save'}:
-        payload['label'] = str(payload.get('name', ''))[:120]
     return await repo.command(action, payload)
 
 

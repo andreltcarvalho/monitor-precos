@@ -84,3 +84,5 @@ Rodada 12: 62 testes cloud, JS de contexto/escaping e Chrome/ASGI aprovados; wor
 Favoritar/ocultar usa uma gravação atômica de um único campo no Supabase; ON CONFLICT mescla o estado atual, evitando read-modify-write na API. RPC invoker, RLS, propriedade da oferta e lista explícita de campos. Validar SQL com duas contas, preservação de campos, oferta ausente e API/UI.
 
 Rodada 13: migração aplicada pelo plugin. SQL real validou preservação de campos, alterações isoladas entre duas contas, oferta ausente e rejeição de campo arbitrário; fixtures revertidas. 64 testes cloud, favoritos/histórico JS e Chrome/ASGI aprovados.
+
+Correção de contrato: source_save/olx_save usam o nome já presente no payload; não acrescentar label a olx_save, que passa kwargs ao parser local. Teste executa o parser real com o payload que a API enfileira.
