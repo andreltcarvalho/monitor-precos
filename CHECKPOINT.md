@@ -1,5 +1,16 @@
 # Checkpoint de implementação
 
+## Alertas no Telegram por valor — publicado, 2026-10-09
+
+Campo **Avisar abaixo de (R$)** em Peças, independente do máximo da lista. Abaixo do valor basta; não exige os 10% mais baratos. Vazio desliga o envio para a peça. Considera o preço com cupom somente quando lido na loja; respeita modelo, marca, validade, estoque, peça pausada, loja desativada e oferta oculta. Não repete o mesmo modelo/loja em preço igual ou maior; queda pode avisar novamente.
+
+**Fontes → Alertas no Telegram** configura bot exclusivo, pareamento com chat privado, teste e pausa. Token no Vault; sem exportação de segredo pelo painel/worker. RPCs intencionalmente SECURITY DEFINER com auth.uid e search_path vazio; acesso anônimo revogado e tabelas em monitor_private com ACL revogada/RLS sem políticas. Integração PostgreSQL com duas contas executada e revertida. Advisor mantém alertas esperados sobre as RPCs autenticadas e RLS privado, além do aviso prévio de senha.
+
+Agendamento Supabase `monitor-precos-telegram-alerts` ativo a cada minuto; primeira execução succeeded. Até um envio por conta/minuto. Sucesso confirmado em histórico privado; 429/falhas explícitas temporárias respeitam pausa e até três tentativas. Timeout sem confirmação não reenvia às cegas. Bot bloqueado ou token recusado pausa os avisos. Leituras/cadastros/preferências revalidados antes do envio.
+
+Validação: 84 testes Python de cloud/alertas, regressões JavaScript e dois verificadores Chrome com API ASGI isolada aprovados. Produção `1498a9c` Ready/CI success; health 200, rota protegida 401 sem segredo, chamada real Supabase → Vercel 200 com lote vazio. Chrome autenticado: sete páginas sem falha JS/HTTP/overflow; campo e configuração visíveis sem editar cadastro real. Sessão expirada de validação renovada pela rotina CloudSync existente. Bot real ainda não conectado; o usuário deve configurar e enviar teste pelo site. Chrome/recebimento de grupos continuam locais.
+
+
 ## UX do painel cloud — 2026-10-07
 
 Escopo: melhorar a versão publicada para desktop, preservando a coleta e as regras de preço. Pesquisa: divulgação progressiva da NN/g (`https://www.nngroup.com/articles/progressive-disclosure/`) e estrutura/landmarks da W3C (`https://www.w3.org/WAI/tutorials/page-structure/`). Ajustes em `cloud/static/` e enriquecimento de apresentação em `/api/catalog` com o resumidor já existente em `presentation.py`.
