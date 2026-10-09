@@ -217,3 +217,5 @@ Consulta as leituras da peça e do período diretamente no Supabase, mantendo RL
 - Motivos completos permanecem recolhidos no resultado da busca, sem transformar bloqueio em sucesso.
 
 - Atualizações de cupons e Atividade preservam o foco do teclado nos detalhes e ações disponíveis.
+
+- A API de cupons lê os estados junto dos demais registros, eliminando uma ida sequencial ao Supabase.

@@ -273,8 +273,9 @@ async def toggle_shop(data: dict = Body(...), repo=Depends(repository)):
 
 @app.get('/api/coupons')
 async def get_coupons(repo=Depends(repository)):
-    post_rows, setting_rows, application_rows, override_rows = await asyncio.gather(
-        values(repo, 'coupons'), repo.records('settings'), values(repo, 'coupon_applications'), repo.records('overrides'))
+    post_rows, setting_rows, application_rows, override_rows, status = await asyncio.gather(
+        values(repo, 'coupons'), repo.records('settings'), values(repo, 'coupon_applications'),
+        repo.records('overrides'), values(repo, 'status'))
     posts = [p for p in post_rows if coupon_is_today(p.get('found_at') or p.get('published_at'))]
     settings = {row['record_key']: row['data'].get('value', '[]') for row in setting_rows}
     disabled = {row['data']['code']: row['data']['disabled'] for row in override_rows
@@ -307,7 +308,6 @@ async def get_coupons(repo=Depends(repository)):
             continue
         coupons.append({'code': row['code'], 'shop': 'Mercado Livre', 'source': row.get('source'),
                         'stamp': row.get('found_at'), 'conditions': '', 'url': ''})
-    status = await values(repo, 'status')
     return {'coupons': coupons, 'applications': ml,
             'collection_status': [row for row in status if row.get('coupon_source')],
             'schedule': next((row for row in status if row.get('coupon_schedule')), None)}

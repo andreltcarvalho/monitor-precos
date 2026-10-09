@@ -121,3 +121,8 @@ Rodada 19: JS e Chrome/ASGI aprovados; falha parcial mostra contagem sem apagar 
 Aplicar a proteção de foco existente aos detalhes de cupons e ações de Atividade; atualizar informações sem tirar a navegação do teclado. Validar disclosures de cupom e cancelar pedido com recarga no Chrome.
 
 Rodada 20: Chrome/ASGI confirmou foco no summary de cupom e no botão de cancelar pedido após recarga; detalhes permanecem abertos. JS geral/concorrência aprovados.
+
+## Rodada 21 — leitura de cupons sem ida sequencial adicional
+Ler os estados junto dos quatro conjuntos que a API já busca em paralelo. Sem alteração de dados, autenticação ou contrato; os testes existentes de estados/filtros/falhas/agendamento e Chrome são a validação relevante, sem teste que apenas repita asyncio.gather.
+
+Rodada 21: 68 testes cloud e Chrome/ASGI aprovados; payload e estados preservados.
