@@ -208,3 +208,14 @@ Após sucesso ou o redirecionamento pós-envio para `/cupons/active?source_page=
 Cupons públicos também são descobertos automaticamente a cada hora na nuvem. Aplique `cloud/coupon_schedule.sql` após `cloud/schedule.sql`; ele reaproveita os mesmos segredos do Vault e usa o job Supabase `monitor-precos-public-coupons`. Habilite o job indicado no SQL somente após validar o endpoint `/api/scheduled/coupons`. Cada fonte tem limite de 30 segundos e falha isoladamente; só códigos encontrados no dia são retornados e leituras anteriores do dia são preservadas. O botão respeita cinco minutos entre consultas. A ativação dos códigos do Mercado Livre continua local. `tests/cloud_coupon_schedule.sql` verifica cache, isolamento, timeout, prioridade da consulta manual e intervalos em uma transação revertida.
 
 Em instalações existentes, `cloud/preferences_query.sql` adiciona a gravação atômica de favoritas/ocultação (já incluída em `cloud/schema.sql` para novas instalações). `tests/cloud_preferences_query.sql` valida preservação dos campos, propriedade e RLS com duas contas em transação revertida.
+
+
+### Alertas de preço no Telegram
+
+Em **Peças → Editar**, preencha **Avisar abaixo de (R$)**. É um limite próprio, separado do preço máximo da lista. Vazio desliga o alerta. O aviso usa o menor preço disponível, incluindo cupom confirmado na sessão da loja; igual ao limite não dispara. Modelo, marcas ignoradas, peça pausada, loja desativada, preferência de ocultar, estoque e validade continuam respeitados. A regra de 10% não é exigida nesse envio.
+
+Em **Fontes → Alertas no Telegram**, crie um bot exclusivo no BotFather com `/newbot`, cole o token no campo protegido, abra o link do seu bot e toque em **Iniciar**. Volte e use **Confirmar conexão**, depois **Enviar teste**. O token não aparece nas respostas do painel nem sincroniza para o PC: fica no Vault. É possível pausar e reativar os avisos.
+
+O Supabase verifica as leituras sincronizadas a cada minuto; até um aviso por conta/minuto evita rajadas. Uma mesma oferta/modelo na mesma loja não volta a avisar pelo mesmo preço ou mais caro; preço menor pode gerar outro aviso. O envio funciona com o painel fechado. Novos preços do Mercado Livre e Shopee ainda precisam do Chrome local; recebimento dos grupos também depende do PC.
+
+Para instalar em outro projeto, aplique `cloud/notifications.sql` depois de `cloud/schedule.sql` e habilite o cron indicado somente após publicar `/api/scheduled/notifications`. Reaproveita os segredos de agendamento existentes no Vault. As RPCs de conexão são autenticadas e restritas ao proprietário; os dados privados e o Vault não devem ser expostos pela Data API. `tests/cloud_notifications.sql` verifica a integração em rollback sem envio real. `tests/verify_notifications_ui.py` usa Chrome real com API ASGI, bot/banco sintéticos.

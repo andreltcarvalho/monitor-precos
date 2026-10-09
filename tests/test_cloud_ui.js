@@ -162,3 +162,22 @@ run('state.coupons.collection_status=[{source:"Pelando",failures:1,detail:"Fonte
 assert.match(node('#coupon-collection summary').textContent,/1 fonte indisponível/);
 assert.match(node('#coupon-collection-status').innerHTML,/Fonte bloqueada/);
 console.log('Public coupons: concise partial result preserves detailed failures.');
+
+// Telegram connection states never expose the bot token in the interface.
+node('#notification-toggle').dataset={};
+run("renderNotifications({configured:false,connected:false,enabled:false})");
+assert.equal(node('#notification-connected').hidden,true);
+assert.match(node('#notification-status').textContent,/Nenhum bot/);
+run("renderNotifications({configured:true,connected:false,enabled:false,username:'fixture_bot',pair_url:'https://t.me/fixture_bot?start=nonce'})");
+assert.equal(node('#notification-pairing').hidden,false);
+assert.equal(node('#notification-pair-link').href,'https://t.me/fixture_bot?start=nonce');
+run("renderNotifications({configured:true,connected:true,enabled:false,username:'fixture_bot',detail:'Pausado'})");
+assert.equal(node('#notification-pairing').hidden,true);
+assert.equal(node('#notification-toggle').textContent,'Ativar alertas');
+assert.equal(node('#notification-toggle').dataset.enabled,'true');
+run("renderNotifications({configured:true,connected:true,enabled:true,username:'fixture_bot'})");
+assert.equal(node('#notification-toggle').textContent,'Pausar alertas');
+run("state.catalog.components=[{id:1,name:'Placa',enabled:1,target:null,notification_target:250000,query:'rtx 5060',ignored_brands:[]}];renderParts()");
+assert.match(node('#parts-list').innerHTML,/Telegram: abaixo de/);
+assert.match(node('#parts-list').innerHTML,/2\.500,00/);
+console.log('Telegram: connection, pairing, pause and per-component threshold passed.');

@@ -1,5 +1,12 @@
 # Alterações
 
+## 2026-10-09 — Alertas por valor no Telegram
+
+- Campo opcional “Avisar abaixo de” por peça, independente do teto do catálogo. Abaixo do valor basta; não exige os 10% mais baratos. Cupom lido na loja participa do valor.
+- Configuração protegida do bot, pareamento com chat privado, teste e pausa em Fontes. Avaliação automática no Supabase e envio pelo bot, sem painel aberto.
+- Histórico privado impede avisos repetidos no mesmo preço ou mais caro. Preço menor permite novo aviso; ofertas vencidas, ocultas, incompatíveis ou de marcas ignoradas não avisam. Falhas temporárias respeitam pausa; entregas incertas não são repetidas automaticamente.
+- Regressões de API/regras/JavaScript, Chrome isolado em duas larguras e integração PostgreSQL com rollback aprovados. Entrega real depende da conexão do bot pelo usuário.
+
 ## 2026-10-08
 
 - Desativar/reativar cupons passa a funcionar imediatamente na nuvem, com preferência diária sincronizada e resultados de aplicação preservados. Fontes recupera abrir/confirmar sessões próprias de Mercado Livre e Shopee pelo PC, expondo somente estado do perfil; comandos novos mantêm RLS por dono. Pedidos pendentes podem ser cancelados antes de recebidos, com condição atômica; histórico distingue Cancelado de Falhou. Consultas HTTP independentes executam em paralelo e informam motivos de falha; botão da peça indica o cooldown manual. Migração restrita à lista de comandos validada em transação revertida, sem alteração de permissões. 50 testes específicos e fluxos Chrome/ASGI aprovados.

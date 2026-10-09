@@ -27,6 +27,11 @@ class FakeRepository:
         self.written = []
         self.queued = []
 
+    async def request(self, method, path, **kwargs):
+        if path == 'rpc/monitor_telegram_config':
+            return {}
+        raise AssertionError('RPC inesperada: ' + path)
+
     async def records(self, kind):
         return [{'record_key': key, 'data': value} for (group, key), value in self.data.items() if group == kind]
 

@@ -21,6 +21,7 @@ from cloud.collection import collect_shop, check_offer, collect_public_coupons, 
 from cloud_protocol import CLOUD_SHOPS, LOCAL_SHOPS, PUBLIC_SETTINGS, SYNC_KINDS, catalog, offer_key
 from core import BRAND_ALIASES, canonical_url, confirmed_price, coupon_is_today, detect_brand, effective_price, matches, offer_matches, price_is_current, reading_valid_until, source_input, top_offers, tracking_price, utcnow, valid_url
 from forms import component_input_errors
+from cloud.notifications import bot_call, candidates, recipient
 from ml_coupon_applicator import application_state
 from presentation import coupon_catalog, offer_card_data
 from shops import Shops, shop_name
@@ -176,6 +177,14 @@ async def get_catalog(repo=Depends(repository)):
 async def save_component(data: dict = Body(...), repo=Depends(repository)):
     errors = component_input_errors(data.get('name'), data.get('kind'), data.get('query'), data.get('capacity_gb'),
                                     data.get('target_text', ''), data.get('target_payment', 'pix'))
+    notification = data.get('notification_target_text')
+    if notification is not None:
+        if not isinstance(notification, str):
+            errors['notification_target_text'] = 'Informe um valor em reais ou deixe vazio.'
+        else:
+            issue = component_input_errors('Peça', 'custom', 'modelo', None, notification, 'pix').get('target')
+            if issue:
+                errors['notification_target_text'] = 'Informe um valor maior que zero, como 2.000,00; vazio desliga o alerta.'
     brands = data.get('ignored_brands') or []
     if not isinstance(brands, list) or any(brand not in BRAND_ALIASES for brand in brands):
         errors['ignored_brands'] = 'Escolha as marcas na lista.'
@@ -185,10 +194,12 @@ async def save_component(data: dict = Body(...), repo=Depends(repository)):
     identifier = data.get('id')
     if identifier is not None and not await repo.get('components', str(identifier)):
         raise HTTPException(404, 'Peça não encontrada.')
+    previous = next((p for p in await components(repo) if p['id'] == identifier), {}) if identifier is not None else {}
     identifier = int(identifier) if identifier is not None else -secrets.randbelow(2**48-1)-1
     part = {key: data.get(key) for key in ('name', 'kind', 'query', 'capacity_gb')}
     part.update(id=identifier, target=money(data['target_text']) if data.get('target_text', '').strip() else None,
                 target_payment=data.get('target_payment', 'pix'), ignored_brands=brands, enabled=int(bool(data.get('enabled', True))))
+    part['notification_target'] = (money(notification) if notification.strip() else None) if notification is not None else previous.get('notification_target')
     part['name'], part['query'] = part['name'].strip(), part['query'].strip()
     part['capacity_gb'] = int(part['capacity_gb']) if part['kind'] == 'ssd' else None
     await repo.put('components', str(identifier), part)
@@ -365,6 +376,72 @@ def authorize_schedule(request):
         raise HTTPException(503, 'Agendamento ainda não configurado.')
     if not secrets.compare_digest(request.headers.get('authorization', ''), 'Bearer ' + secret):
         raise HTTPException(401, 'Agendamento não autorizado.')
+
+
+@app.post('/api/scheduled/notifications')
+async def scheduled_notifications(request: Request, data: dict = Body(...)):
+    authorize_schedule(request)
+    parts, offers, receipts = data.get('components'), data.get('offers'), data.get('receipts', [])
+    if (not isinstance(parts, list) or len(parts) > 500 or not isinstance(offers, list) or len(offers) > 10000
+            or not isinstance(receipts, list) or len(receipts) > 10000
+            or not isinstance(data.get('settings', {}), dict)
+            or any(not isinstance(row, dict) for row in parts + offers + receipts)):
+        raise HTTPException(422, 'Lote de alertas inválido.')
+    return {'notifications': candidates(parts, offers, receipts, data.get('settings') or {})}
+
+
+async def notification_config(repo):
+    return await repo.request('POST', 'rpc/monitor_telegram_config', data={}) or {}
+
+
+def notification_public(config):
+    connected = bool(config.get('chat_id'))
+    pairing = bool(config.get('nonce') and config.get('pair_until') and datetime.fromisoformat(config['pair_until']) > datetime.now(timezone.utc))
+    return {'configured': bool(config.get('token')), 'connected': connected, 'enabled': config.get('enabled', False),
+            'username': config.get('username', ''), 'detail': config.get('detail', ''),
+            'pair_url': ('https://t.me/' + config['username'] + '?start=' + config['nonce']) if pairing else None}
+
+
+@app.get('/api/notifications')
+async def notifications(repo=Depends(repository)):
+    return notification_public(await notification_config(repo))
+
+
+@app.post('/api/notifications/{action}')
+async def configure_notifications(action: str, data: dict = Body(default={}), repo=Depends(repository)):
+    if action == 'connect':
+        if not isinstance(data.get('token'), str):
+            raise HTTPException(422, 'Informe o token fornecido pelo BotFather.')
+        token = data['token'].strip()
+        async with httpx.AsyncClient(timeout=15) as client:
+            bot = await bot_call(client, token, 'getMe')
+        if not re.fullmatch(r'[A-Za-z0-9_]{5,64}', bot.get('username', '')):
+            raise HTTPException(502, 'O Telegram não identificou o bot.')
+        await repo.request('POST', 'rpc/monitor_telegram_save', data={'bot_token': token, 'bot_username': bot['username']})
+    elif action == 'pair':
+        config = await notification_config(repo)
+        if not config.get('token') or not config.get('nonce') or datetime.fromisoformat(config['pair_until']) <= datetime.now(timezone.utc):
+            raise HTTPException(422, 'Conecte o bot novamente para gerar um novo link.')
+        async with httpx.AsyncClient(timeout=15) as client:
+            updates = await bot_call(client, config['token'], 'getUpdates', {'offset': -100, 'limit': 100, 'timeout': 0, 'allowed_updates': ['message']})
+        chat = recipient(updates, config['nonce'], config['paired_at'])
+        if not chat:
+            raise HTTPException(422, 'Abra o link do bot, toque em Iniciar e depois confirme aqui.')
+        await repo.request('POST', 'rpc/monitor_telegram_recipient', data={'pair_nonce': config['nonce'], 'recipient_id': chat})
+    elif action == 'toggle':
+        if type(data.get('enabled')) is not bool:
+            raise HTTPException(422, 'Estado inválido.')
+        await repo.request('POST', 'rpc/monitor_telegram_toggle', data={'is_enabled': data['enabled']})
+    elif action == 'test':
+        config = await notification_config(repo)
+        if not config.get('chat_id'):
+            raise HTTPException(422, 'Conecte seu chat antes de enviar o teste.')
+        async with httpx.AsyncClient(timeout=15) as client:
+            await bot_call(client, config['token'], 'sendMessage', {'chat_id': config['chat_id'], 'text': 'Monitor conectado. Você receberá ofertas abaixo do valor de notificação de cada peça.'})
+        return {'detail': 'Mensagem de teste enviada ao seu Telegram.'}
+    else:
+        raise HTTPException(404, 'Ação não encontrada.')
+    return notification_public(await notification_config(repo))
 
 
 @app.post('/api/scheduled/coupons')

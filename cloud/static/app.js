@@ -201,7 +201,7 @@ function renderParts() {
   $('#parts-list').innerHTML=state.catalog.components.map(part=>{
     const brands=typeof part.ignored_brands==='string'?JSON.parse(part.ignored_brands):part.ignored_brands||[];
     const limit=part.target!=null?'Até '+currency(part.target)+' '+(part.target_payment==='card'?'no total do cartão':'no Pix'):'Sem preço máximo';
-    return `<div class="row"><div class="copy"><h3>${escapeHtml(part.name)}</h3><p class="muted">${part.enabled?'Monitorando':'Pausada'} · ${escapeHtml(limit)}</p><details class="part-criteria" data-id="${part.id}" ${open.has(String(part.id))?'open':''}><summary>Busca${brands.length?' e '+brands.length+' marcas ignoradas':' e critérios'}</summary><p>Buscar por: ${escapeHtml(part.query)}</p>${brands.length?`<p>Ignorar: ${escapeHtml(brands.join(', '))}</p>`:''}<button class="text danger" data-action="delete-part" data-id="${part.id}">Excluir peça</button></details></div><button class="secondary" data-action="edit-part" data-id="${part.id}" aria-label="Editar ${escapeHtml(part.name)}">Editar</button></div>`;
+    return `<div class="row"><div class="copy"><h3>${escapeHtml(part.name)}</h3><p class="muted">${part.enabled?'Monitorando':'Pausada'} · ${escapeHtml(limit)}</p>${part.notification_target!=null?`<p class="muted">Telegram: abaixo de ${currency(part.notification_target)}</p>`:''}<details class="part-criteria" data-id="${part.id}" ${open.has(String(part.id))?'open':''}><summary>Busca${brands.length?' e '+brands.length+' marcas ignoradas':' e critérios'}</summary><p>Buscar por: ${escapeHtml(part.query)}</p>${brands.length?`<p>Ignorar: ${escapeHtml(brands.join(', '))}</p>`:''}<button class="text danger" data-action="delete-part" data-id="${part.id}">Excluir peça</button></details></div><button class="secondary" data-action="edit-part" data-id="${part.id}" aria-label="Editar ${escapeHtml(part.name)}">Editar</button></div>`;
   }).join('')||empty('Adicione sua primeira peça','Cadastre o que quer comprar para acompanhar as ofertas.');
 }
 function brandChoices() {
@@ -231,6 +231,7 @@ function addPart(){resetPart();$('#parts-list').hidden=true;$('#part-form').hidd
 function editPart(id) {
   const part=state.catalog.components.find(p=>p.id===id);if(!part)return;const form=$('#part-form');form.hidden=false;$('#parts-list').hidden=true;$('#add-part').hidden=true;
   for(const key of ['id','name','kind','query','capacity_gb','target_payment'])form.elements[key].value=part[key]??'';
+  form.elements.notification_target_text.value=part.notification_target==null?'':(part.notification_target/100).toLocaleString('pt-BR',{minimumFractionDigits:2,useGrouping:false});
   form.elements.target_text.value=part.target==null?'':(part.target/100).toLocaleString('pt-BR',{minimumFractionDigits:2,useGrouping:false});form.elements.enabled.checked=!!part.enabled;
   const brands=typeof part.ignored_brands==='string'?JSON.parse(part.ignored_brands):part.ignored_brands||[];
   $$('#brands input').forEach(input=>input.checked=brands.includes(input.value));$('#brand-search').value='';brandChoices();partErrors();$('#capacity-field').hidden=part.kind!=='ssd';$('#part-form-title').textContent='Editar '+part.name;$('#part-save').textContent='Salvar alterações';$('#part-cancel').hidden=false;form.scrollIntoView({block:'start'});form.elements.name.focus();
@@ -269,6 +270,20 @@ async function loadSources() {
     return `<div class="row"><div class="copy"><h3>${escapeHtml(source.name)}</h3><p class="muted">${pending?'Alteração na fila do PC':source.enabled?(workerConnected()?'Acompanhando novas mensagens':'Aguardando monitor no PC'):'Grupo pausado'}</p><details class="source-configuration" data-id="${source.id}" ${sourceOpen.has(String(source.id))?'open':''}><summary>Configuração do grupo</summary><p>Referência: <code>${escapeHtml(source.reference)}</code></p><button class="text danger" data-action="source-delete" data-id="${source.id}" ${pending?'disabled':''}>Excluir grupo</button></details></div><button class="secondary" data-action="source-toggle" data-id="${source.id}" data-enabled="${!source.enabled}" ${pending?'disabled':''} aria-label="${source.enabled?'Pausar':'Ativar'} ${escapeHtml(source.name)}">${source.enabled?'Pausar':'Ativar'}</button></div>`;
   }).join('')||empty('Nenhum grupo sincronizado','Conecte o monitor do PC para acompanhar mensagens novas do Telegram.');
   restoreShops();restoreGroups();
+  await loadNotifications();
+}
+
+function renderNotifications(body) {
+  $('#notification-summary').textContent=body.connected?(body.enabled?'· Ativos':'· Pausados'):'· Não conectado';
+  $('#notification-status').textContent=body.connected?`@${body.username}: ${body.enabled?'alertas ativos':'alertas pausados'}. ${body.detail||'Configure o valor de cada peça na aba Peças.'}`:body.configured?'Bot salvo. Conecte seu chat para receber os avisos.':'Nenhum bot conectado. Configure abaixo para receber os avisos.';
+  $('#notification-pairing').hidden=!body.pair_url;$('#notification-pair-link').href=body.pair_url||'#';
+  $('#notification-connected').hidden=!body.connected;$('#notification-toggle').textContent=body.enabled?'Pausar alertas':'Ativar alertas';$('#notification-toggle').dataset.enabled=String(!body.enabled);
+}
+async function loadNotifications(){renderNotifications(await api('/api/notifications'));}
+async function notificationAction(action,body={}) {
+  $('#notification-error').textContent='';
+  try {const result=await api('/api/notifications/'+action,body);if(action==='test')notice(result.detail);else renderNotifications(result);return true;}
+  catch(error){$('#notification-error').textContent=error.message;return false;}
 }
 
 async function loadCoupons() {const request=++state.couponsRequest,session=state.session,first=!state.coupons;let body;try{body=await api('/api/coupons');}catch(error){if(request===state.couponsRequest&&state.session===session&&session)throw error;return;}if(request!==state.couponsRequest||state.session!==session||!session)return;state.coupons=body;const shops=[...new Set(state.coupons.coupons.map(c=>c.shop))].sort();options($('#coupon-shop'),shops,'Todas');if(first&&shops.includes('Mercado Livre'))$('#coupon-shop').value='Mercado Livre';renderCoupons();}
@@ -460,6 +475,10 @@ $('#part-form').elements.kind.addEventListener('change',()=>$('#capacity-field')
 $('#brand-search').addEventListener('input',brandChoices);$('#brands').addEventListener('change',brandChoices);
 $('#part-cancel').addEventListener('click',()=>{resetPart();$('#add-part').focus();});
 $('#part-form').addEventListener('submit',async event=>{event.preventDefault();const form=event.currentTarget,body=Object.fromEntries(new FormData(form));body.id=body.id?Number(body.id):null;body.enabled=form.elements.enabled.checked;body.ignored_brands=$$('#brands input:checked').map(input=>input.value);$('#part-error').textContent='';partErrors();await busy($('#part-save'),async()=>{try{await api('/api/components',body);resetPart();await reloadCatalog();notice('Peça salva. As buscas online usam este cadastro; o PC recebe a alteração ao conectar.');}catch(error){$('#part-error').textContent=error.fields?'Revise os campos indicados.':error.message;partErrors(error.fields||{});if(!error.fields)throw error;}});});
+$('#notification-form').addEventListener('submit',event=>{event.preventDefault();const form=event.currentTarget;busy(event.submitter,async()=>{const token=form.elements.token.value;form.elements.token.value='';if(await notificationAction('connect',{token}))form.closest('details').open=false;});});
+$('#notification-pair').addEventListener('click',()=>busy($('#notification-pair'),()=>notificationAction('pair')));
+$('#notification-test').addEventListener('click',()=>busy($('#notification-test'),()=>notificationAction('test')));
+$('#notification-toggle').addEventListener('click',()=>busy($('#notification-toggle'),()=>notificationAction('toggle',{enabled:$('#notification-toggle').dataset.enabled==='true'})));
 $('#source-form').addEventListener('submit',event=>{event.preventDefault();const form=event.currentTarget;$('#source-error').textContent='';busy(event.submitter,async()=>{try{await command('source_save',Object.fromEntries(new FormData(form)));form.reset();form.closest('details').open=false;}catch(error){$('#source-error').textContent=error.message;}});});
 $('#used-form').addEventListener('submit',event=>{event.preventDefault();const form=event.currentTarget,draft=Object.fromEntries(new FormData(form));draft.mode='fields';draft.url='';$('#used-error').textContent='';busy(event.submitter,async()=>{try{await command('olx_save',draft);form.reset();form.elements.state.value='SP';form.closest('details').open=false;await loadUsed();}catch(error){$('#used-error').textContent=error.message;}});});
 $('#copy-url').addEventListener('click',()=>busy($('#copy-url'),async()=>{await navigator.clipboard.writeText(location.origin);notice('Endereço copiado.');}));
