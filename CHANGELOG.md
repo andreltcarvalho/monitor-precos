@@ -1,5 +1,10 @@
 # Alterações
 
+## 2026-10-09 — Organização da documentação
+
+- README curto com apresentação, captura demonstrativa e início rápido. Guias atuais de instalação, uso, integrações, arquitetura, deploy, desenvolvimento e privacidade em `docs/`.
+- Planos, checkpoints, registros de produto/design e README anterior preservados em `docs/archive/`; mapas de diagnóstico e testes nas respectivas pastas. Código, scripts de execução e estrutura de deploy preservados.
+
 ## 2026-10-09 — Alertas por valor no Telegram
 
 - Campo opcional “Avisar abaixo de” por peça, independente do teto do catálogo. Abaixo do valor basta; não exige os 10% mais baratos. Cupom lido na loja participa do valor.
