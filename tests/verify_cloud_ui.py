@@ -96,6 +96,10 @@ async def main():
             await page.locator('[data-action="coupon-filter"][data-state="failed"]').click()
             assert await page.locator('.coupon-row').count()==1
             await page.locator('.coupon-conditions summary').click();assert await page.locator('.coupon-conditions').get_attribute('open') is not None
+            await page.locator('.coupon-conditions summary').focus()
+            await page.evaluate('loadCoupons()')
+            assert await page.locator('.coupon-conditions').get_attribute('open') is not None
+            assert await page.locator('.coupon-conditions summary').evaluate('(el)=>el===document.activeElement')
             await page.locator('#coupon-search').fill('RECUPERAR');assert await page.locator('.coupon-conditions').get_attribute('open') is not None
             await page.locator('[data-action="coupon-disable"]').click();await page.wait_for_function('document.querySelector("#coupons-list").innerText.includes("Nenhum cupom")');
             await page.locator('[data-action="coupon-filter"][data-state="disabled"]').click();assert await page.locator('.coupon-row').count()==1
@@ -198,7 +202,12 @@ async def main():
             await page.wait_for_function('document.querySelector("[data-action=olx-scan]").innerText.includes("Pedido enviado")')
             assert 'Pedido enviado' in await page.locator('[data-action="olx-scan"]').inner_text()
             assert repo.queued[-1]['action']=='olx_scan'
-            await page.locator('#navigation [data-tab="activity"]').click();await page.wait_for_function('!document.querySelector("#activity-list").hasAttribute("aria-busy")')
+            await page.locator('#navigation [data-tab="activity"]').click()
+            await page.wait_for_function('!document.querySelector("#activity-list").hasAttribute("aria-busy")')
+            await page.locator('#activity-tabs [data-state="pending"]').click()
+            cancel=page.locator('#activity-list [data-action="command-cancel"]').first
+            await cancel.focus();await page.evaluate('reloadCatalog()')
+            assert await cancel.evaluate('(el)=>el===document.activeElement')
             await page.locator('[data-action="activity-filter"][data-state="pending"]').click()
             assert 'Aguardando o PC' in await page.locator('#activity-list').inner_text()
             await page.locator('[data-action="activity-filter"][data-state="history"]').click()

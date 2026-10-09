@@ -116,3 +116,8 @@ Rodada 18: cinco suítes JS e Chrome/ASGI aprovados. Teste de saída/troca de se
 Resumo de coleta com quantidade realmente consultada e fontes indisponíveis; falhas completas permanecem no disclosure existente. Nenhuma fonte respondeu não vira sucesso ou ausência de cupons. Validar sucesso, falha parcial e falha total em JS/Chrome.
 
 Rodada 19: JS e Chrome/ASGI aprovados; falha parcial mostra contagem sem apagar o motivo e falha total informa preservação do dia.
+
+## Rodada 20 — foco nas listas restantes
+Aplicar a proteção de foco existente aos detalhes de cupons e ações de Atividade; atualizar informações sem tirar a navegação do teclado. Validar disclosures de cupom e cancelar pedido com recarga no Chrome.
+
+Rodada 20: Chrome/ASGI confirmou foco no summary de cupom e no botão de cancelar pedido após recarga; detalhes permanecem abertos. JS geral/concorrência aprovados.

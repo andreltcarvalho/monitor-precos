@@ -278,6 +278,7 @@ function couponCollectionSummary(statuses) {
 }
 function renderCoupons() {
   if(!state.coupons)return;
+  const restore=preserveListFocus('#coupons-list');
   const schedule=state.coupons.schedule;
   $('#coupon-schedule').hidden=!schedule;
   if(schedule)$('#coupon-schedule').textContent=schedule.state==='running'?'Buscando cupons públicos na nuvem…':`Busca pública automática a cada hora, mesmo com o PC desligado. ${schedule.state==='failed'?'Última tentativa falhou; os resultados anteriores foram preservados.':'Última busca '+age(schedule.checked_at)+'.'}`;
@@ -315,7 +316,8 @@ function renderCoupons() {
     return `<article class="row coupon-row"><div class="copy"><div class="coupon-heading"><h3 class="coupon-code">${escapeHtml(c.code||'Ativação pelo link')}</h3><span class="badge ${status==='active'?'good':status==='failed'?'bad':''}">${escapeHtml(applied?.label||'Encontrado')}</span></div><p class="coupon-origin"><strong>${escapeHtml(c.shop||'Loja não identificada')}</strong> · ${escapeHtml(c.source||'Fonte não informada')} · ${time(c.stamp)}</p>${applied?.failure?`<p class="coupon-failure">${escapeHtml(applied.failure)}${applied.retryable?' · pode retentar':''}</p>`:''}<details class="coupon-conditions" data-code="${escapeHtml(c.code||c.url)}"><summary>Condições${applied?' e resultado':''}</summary><p>${escapeHtml(c.conditions||'Condições não informadas')}</p>${applied?`<p>${escapeHtml(applied.detail||'Ainda não enviado à loja.')}</p><p class="muted">${escapeHtml(applied.guidance)} · ${applied.attempts||0} tentativas</p>`:'<p class="muted">O desconto só é confirmado na loja, conforme as condições.</p>'}<div class="actions">${source?`<a href="${escapeHtml(source)}" target="_blank" rel="noopener noreferrer">Ver publicação</a>`:''}${applied?`<button class="text" data-action="coupon-disable" data-code="${escapeHtml(applied.code)}" data-enabled="${!applied.disabled}">${applied.disabled?'Reativar cupom':'Desativar cupom'}</button>`:''}</div></details></div><div class="row-actions">${c.code?`<button class="secondary" data-action="copy-coupon" data-code="${escapeHtml(c.code)}" aria-label="Copiar código ${escapeHtml(c.code)}">Copiar código</button>`:''}${link?`<a class="text-link" href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer">Abrir na loja</a>`:''}${applied?.retryable?`<button class="secondary" data-action="coupon-retry" data-code="${escapeHtml(applied.code)}">Retentar</button>`:''}</div></article>`;
   }).join('')||empty(ml&&group?'Nenhum cupom nesta seleção':'Nenhum cupom encontrado hoje',search||shop?'Altere a busca ou a loja para ver outros cupons.':'Novos códigos aparecem com as fontes públicas e mensagens do Telegram.');
   $$('#coupons-list details').forEach(detail=>detail.open=open.has(detail.dataset.code));
-  if(focus)$$('#coupons [data-action]').find(button=>button.dataset.action===focus.action&&button.dataset.code===focus.code&&button.dataset.state===focus.state)?.focus();
+  if(focus)$$('#coupons [data-action]').find(button=>button.dataset.action===focus.action&&button.dataset.code===focus.code&&button.dataset.state===focus.state)?.focus({preventScroll:true});
+  restore();
 }
 
 async function loadHistory() {
@@ -385,6 +387,7 @@ function commandContext(row) {
 }
 
 function renderActivity() {
+  const restore=preserveListFocus('#activity');
   const labels={scan:'Buscar ofertas da peça no PC',check:'Conferir oferta',coupon_batch:'Aplicar cupons de hoje',coupon_retry:'Retentar cupons',coupon_disabled:'Alterar cupom',component_delete:'Excluir peça',source_save:'Adicionar grupo',source_toggle:'Alterar grupo',source_delete:'Excluir grupo',olx_save:'Adicionar busca OLX',olx_scan:'Consultar OLX',olx_toggle:'Alterar busca OLX',olx_delete:'Excluir busca OLX',session_open:'Abrir Chrome para login',session_confirm:'Confirmar sessão do Chrome'};
   const statuses={pending:'Aguardando o PC',running:'Recebido pelo PC',done:'Concluído',failed:'Falhou'};
   const all=state.catalog?.commands||[],pending=all.filter(row=>['pending','running'].includes(row.status));
@@ -403,6 +406,7 @@ function renderActivity() {
     const stale=row.status==='running'&&Date.now()-Date.parse(row.updated_at)>600000;
     return `<div class="row"><div class="copy"><h3>${escapeHtml(labels[row.action]||row.action)}${commandContext(row)?' · '+escapeHtml(commandContext(row)):''}</h3><p>${escapeHtml(row.detail||'Pedido salvo na fila.')} ${stale?'Sem confirmação recente; confira o monitor local antes de tentar novamente.':''}</p><p class="muted">${time(row.created_at)}</p></div><div class="row-actions"><span class="badge ${canceled?'':row.status==='done'?'good':row.status==='failed'?'bad':'warn'}">${canceled?'Cancelado':stale?'Sem confirmação':statuses[row.status]}</span>${row.status==='pending'&&row.action!=='component_delete'?`<button class="text" data-action="command-cancel" data-id="${escapeHtml(row.id)}">Cancelar pedido</button>`:''}</div></div>`;
   }).join('')||empty(state.activityFilter==='pending'?'Nenhum pedido pendente':'Nenhum pedido finalizado',state.activityFilter==='pending'?'As ações enviadas ao PC aparecerão aqui até serem concluídas.':'O resultado dos pedidos ficará neste histórico.');
+  restore();
 }
 function details(row) {
   if(!row)return;

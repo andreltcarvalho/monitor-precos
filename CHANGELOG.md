@@ -215,3 +215,5 @@ Consulta as leituras da peça e do período diretamente no Supabase, mantendo RL
 ### Retorno das buscas públicas
 - Avisos de cupons mostram a quantidade consultada e o número de fontes indisponíveis.
 - Motivos completos permanecem recolhidos no resultado da busca, sem transformar bloqueio em sucesso.
+
+- Atualizações de cupons e Atividade preservam o foco do teclado nos detalhes e ações disponíveis.
