@@ -106,6 +106,14 @@ def matches(component: dict, text: str) -> bool:
     text = normalized(text)
     kind = component['kind']
     query = normalized(component.get('query') or '')
+    # Store titles spell GPU families as RTX5060Ti / RX9060XT and memory as 16G.
+    # Normalize these known families only; arbitrary model codes stay intact.
+    gpu_family = r'\b(rtx|rx)\s*(\d{4})(?:\s*(ti|super|xtx|xt))?\b'
+    if re.search(gpu_family, query) or kind == 'gpu':
+        def gpu_text(value):
+            value = re.sub(gpu_family, lambda match: ' '.join(item for item in match.groups() if item), value)
+            return re.sub(r'\b(\d+)\s*g(?:b)?\b', r'\1gb', value)
+        text, query = gpu_text(text), gpu_text(query)
     if kind == 'custom':
         fan_category = r'\b(?:ventoinhas?|fans?|coolers?\s+(?:para\s+|de\s+)?gabinete)\b'
         text = re.sub(fan_category, 'ventoinha', text)

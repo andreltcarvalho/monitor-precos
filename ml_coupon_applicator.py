@@ -76,7 +76,7 @@ class CouponApplicator:
 
     def catalog(self):
         self.store.prune_coupons()
-        rows = coupon_catalog(self.store.rows('SELECT * FROM coupon_posts ORDER BY published_at DESC'), [],
+        rows = coupon_catalog(self.store.rows('SELECT * FROM coupon_posts ORDER BY published_at DESC,message_id DESC'), [],
                               json.loads(self.store.get_setting('public_coupons', '[]')))
         codes = {}
         for row in rows:

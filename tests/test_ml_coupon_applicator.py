@@ -586,8 +586,10 @@ class ApplicatorTests(unittest.IsolatedAsyncioTestCase):
         self.browser.apply_coupon.assert_awaited_once()
 
     async def test_disable_queued_coupon_is_respected_before_submission(self):
-        self.post('SEGUNDO10')
-        self.post('PRIMEIRO10', number=2)
+        # O relógio pode dar o mesmo instante para publicações consecutivas.
+        with patch(__name__ + '.utcnow', return_value=utcnow()):
+            self.post('SEGUNDO10')
+            self.post('PRIMEIRO10', number=2)
         async def submit(code):
             self.applicator.set_disabled('SEGUNDO10', True)
             return 'inserted', 'Cupom adicionado!'

@@ -102,22 +102,39 @@ class ScheduledCouponTests(unittest.TestCase):
 
 
 class ScheduledCollectionTests(unittest.IsolatedAsyncioTestCase):
-    async def test_hidden_and_known_above_twelfth_not_consulted(self):
+    async def test_old_expensive_offer_is_rechecked_and_price_drop_saved_but_hidden_is_skipped(self):
         known = [offer(i, 200000+i*1000) for i in range(14)]
         known[13]['hidden'] = True
-        collector = SimpleNamespace(discover=AsyncMock(return_value=[known[12]['url'], known[13]['url']]), check=AsyncMock())
+        reading = dict(known[12], pix=100000)
+        collector = SimpleNamespace(discover=AsyncMock(return_value=[known[12]['url'], known[13]['url']]), check=AsyncMock(return_value=reading))
         repo = ScheduledReadings(known)
         status = await collect_shop(collector, repo, part(), known, 'Pichau')
-        collector.check.assert_not_awaited()
-        self.assertEqual(status['count'], 0)
+        collector.check.assert_awaited_once_with(known[12]['url'], part())
+        self.assertEqual((status['discovered'], status['checked'], status['count'], status['skipped']), (2, 1, 1, 1))
+        self.assertEqual(next(row['data']['pix'] for row in repo.written.values() if row['kind']=='offers'), 100000)
 
-    async def test_new_expensive_offer_does_not_replace_cheapest_twelve(self):
+    async def test_new_expensive_offer_is_counted_and_saved_without_replacing_cheapest_catalogue(self):
         known = [offer(i, 200000+i*1000) for i in range(12)]
         reading = offer('expensive', 250000)
         collector = SimpleNamespace(discover=AsyncMock(return_value=[reading['url']]), check=AsyncMock(return_value=reading))
         repo = ScheduledReadings(known)
-        await collect_shop(collector, repo, part(), known, 'Pichau')
-        self.assertFalse(any(kind == 'offers' for kind, key in repo.written))
+        status = await collect_shop(collector, repo, part(), known, 'Pichau')
+        self.assertTrue(any(kind == 'offers' for kind, key in repo.written))
+        self.assertEqual((status['count'], status['checked']), (1, 1))
+        from core import top_offers
+        self.assertNotIn(offer_key(1, reading['url']), [row['id'] for row in top_offers([part()],known)[1]])
+
+    async def test_discovery_total_is_separate_from_bounded_checks_and_records(self):
+        from shops import DiscoveredLinks
+        readings = [offer(i, 200000+i*1000) for i in range(12)]
+        by_url = {row['url']:row for row in readings}
+        collector = SimpleNamespace(discover=AsyncMock(return_value=DiscoveredLinks(list(by_url), total=60)),
+                                    check=AsyncMock(side_effect=lambda url, component:by_url[url]))
+        repo = ScheduledReadings([])
+        status = await collect_shop(collector, repo, part(), [], 'Pichau')
+        self.assertEqual((status['discovered'],status['checked'],status['count']),(60,12,12))
+        self.assertEqual(len(repo.written),25)
+        self.assertIn('60 anúncios encontrados',status['detail'])
 
     async def test_failure_preserves_last_price_and_reports_failed_revalidation(self):
         old = offer('old', 200000)

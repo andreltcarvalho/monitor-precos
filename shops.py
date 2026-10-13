@@ -10,7 +10,7 @@ from pathlib import Path
 import httpx
 from bs4 import BeautifulSoup
 
-from core import AMOUNT, coupon_is_today, coupons, detect_brand, effective_price, matches, money, normalized, prices, utcnow, valid_url
+from core import AMOUNT, canonical_url, coupon_is_today, coupons, detect_brand, effective_price, matches, money, normalized, prices, utcnow, valid_url
 from mercado_livre_browser import MELI_HOSTS, MercadoLivreBrowser
 from shopee_browser import SHOPEE_HOSTS, ShopeeBrowser, validate_shopee_page
 
@@ -364,10 +364,45 @@ def product_offer(html: str, url: str, expected: dict | None = None) -> dict:
                 availability=availability, message=None)
 
 
-def search_links(html: str, base_url: str, component: dict | None) -> list[str]:
+def kabum_catalog_products(soup: BeautifulSoup) -> list[dict]:
+    """The listing payload includes products missing from the SEO JSON-LD."""
+    script = soup.find('script', id='__NEXT_DATA__')
+    if not script:
+        return []
+    try:
+        page = json.loads(script.string or script.get_text()).get('props', {}).get('pageProps', {}).get('data', {})
+        if isinstance(page, str):
+            page = json.loads(page)
+        rows = page.get('catalogServer', {}).get('data', [])
+    except (ValueError, TypeError, AttributeError):
+        return []
+    return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
+
+
+class DiscoveredLinks(list):
+    def __init__(self, urls, total):
+        super().__init__(urls)
+        self.total = total
+
+
+def search_links(html: str, base_url: str, component: dict | None, limit: int | None = 12) -> list[str]:
     soup = BeautifulSoup(html, 'html.parser')
     found = []
     excluded = set()
+    if shop_name(base_url) == 'KaBuM':
+        def listing_price(row):
+            value = row.get('priceWithDiscount') or row.get('priceMarketplace') or row.get('price')
+            return value if isinstance(value, (int, float)) and value > 0 else float('inf')
+        for row in sorted(kabum_catalog_products(soup), key=listing_price):
+            code, title = str(row.get('code', '')), row.get('name')
+            if not code.isdigit() or not isinstance(title, str) or row.get('available') is False:
+                continue
+            if component is not None and not matches(component, title):
+                continue
+            # Numeric product identity comes from this store's listing, never externalUrl.
+            href = urljoin(base_url, '/produto/' + code + '/' + quote(str(row.get('friendlyName') or ''), safe='-'))
+            if href not in found:
+                found.append(href)
     if shop_name(base_url) == 'Mercado Livre':
         for card in soup.select('.ui-search-layout__item'):
             if re.search(r'\b(?:internacional|compra internacional)\b', normalized(card.get_text(' ', strip=True))):
@@ -400,7 +435,11 @@ def search_links(html: str, base_url: str, component: dict | None) -> list[str]:
         title = item.get('name', '')
         if title and (component is None or matches(component, title)) and urlsplit(href).hostname in STORE_HOSTS and href.split('#')[0] not in excluded and href not in found and href != base_url:
             found.append(href)
-    return found[:12]
+    unique = {}
+    for url in found:
+        unique.setdefault(canonical_url(url), url)
+    found = list(unique.values())
+    return found if limit is None else found[:limit]
 
 
 def mercado_livre_search_candidates(html: str, base_url: str, component: dict) -> list[dict]:
@@ -562,10 +601,10 @@ class Shops:
 
     async def discover(self, shop: str, component: dict) -> list[str]:
         html, resolved = await self._search_page(shop, component)
-        result = search_links(html, resolved, component)
+        result = search_links(html, resolved, component, limit=None)
         if not result:
             raise ValueError('Nenhum anúncio legível encontrado nesta consulta. Pode haver ausência de ofertas ou conteúdo carregado por scripts.')
-        return result
+        return DiscoveredLinks(result[:12], total=len(result))
 
     async def discover_mercado_livre(self, component: dict) -> list[dict]:
         html, resolved = await self._search_page('Mercado Livre', component)

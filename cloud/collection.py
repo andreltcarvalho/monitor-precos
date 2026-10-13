@@ -3,7 +3,7 @@ import asyncio
 
 import httpx
 
-from core import canonical_url, coupon_is_today, detect_brand, effective_price, reading_valid_until, top_offers, tracking_price, utcnow
+from core import canonical_url, coupon_is_today, detect_brand, reading_valid_until, utcnow
 from cloud_protocol import offer_key
 
 
@@ -43,16 +43,19 @@ async def check_offer(collectors, repo, part, old, timeout=60):
 
 async def collect_shop(collectors, repo, part, known, name, timeout=120):
     count, failures, reasons = 0, 0, []
+    discovered, checked, skipped = 0, 0, 0
     try:
         async with asyncio.timeout(timeout):
             candidates = await collectors.discover(name, part)
+            discovered = getattr(candidates, 'total', len(candidates))
             for url in candidates[:12]:
                 old = next((o for o in known if canonical_url(o['url']) == canonical_url(url)), None)
-                cut = top_offers([part], known, tracking_price).get(part['id'], [])
-                if old and (old.get('hidden') or len(cut) == 12 and tracking_price(old) > tracking_price(cut[-1])):
+                if old and old.get('hidden'):
+                    skipped += 1
                     continue
                 try:
                     reading = await collectors.check(url, part)
+                    checked += 1
                     key = offer_key(part['id'], reading['url'])
                     row = dict(reading, id=key, component_id=part['id'],
                                brand=reading.get('brand') or detect_brand(reading['title']),
@@ -60,9 +63,6 @@ async def collect_shop(collectors, repo, part, known, name, timeout=120):
                     prior = await repo.get('offers', key)
                     row['published_at'] = (prior or row).get('published_at', row.get('published_at'))
                     row['origins'] = (prior or {}).get('origins') or name
-                    new_cut = top_offers([part], known, tracking_price).get(part['id'], [])
-                    if not old and len(new_cut) == 12 and effective_price(row) > tracking_price(new_cut[-1]):
-                        continue
                     stamp = row.get('checked_at') or utcnow()
                     observation = {field: row.get(field) for field in ('pix', 'card', 'announced', 'coupon_price', 'status', 'availability')}
                     observation.update(offer_id=key, observed_at=stamp)
@@ -79,9 +79,19 @@ async def collect_shop(collectors, repo, part, known, name, timeout=120):
         failures += 1
         reasons.append(failure_reason(exc))
     detail = f'{count} ofertas consultadas' + (' · algumas leituras falharam' if failures else '')
+    if discovered:
+        detail = f'{discovered} anúncios encontrados · {checked} preços conferidos · {count} leituras salvas'
+        if skipped:
+            detail += f' · {skipped} ofertas ocultas ignoradas'
+        if discovered > len(candidates[:12]):
+            detail += ' · até 12 conferências por ciclo; catálogo mostra as 12 mais baratas'
+        if failures:
+            detail += ' · algumas leituras falharam'
     if not count and failures:
         detail = 'Consulta bloqueada, indisponível ou sem anúncios legíveis; histórico preservado.'
-    status = {'name': name, 'component_id': part['id'], 'count': count, 'failures': failures, 'detail': detail, 'reason': next(iter(reasons), ''), 'checked_at': utcnow()}
+    status = {'name': name, 'component_id': part['id'], 'count': count, 'discovered': discovered,
+              'checked': checked, 'skipped': skipped, 'failures': failures, 'detail': detail,
+              'reason': next(iter(reasons), ''), 'checked_at': utcnow()}
     await repo.put('status', 'cloud:' + name + ':' + str(part['id']), status)
     return status
 
