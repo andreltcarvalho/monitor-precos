@@ -128,7 +128,7 @@ async def authentication(action: str, request: Request, data: dict = Body(defaul
 
 @app.get('/health')
 def health():
-    return {'app': 'monitor-precos', 'mode': 'cloud', 'region': os.environ.get('VERCEL_REGION', 'local'), 'collection_version': '2026-10-13-v2', 'configured': bool(os.environ.get('SUPABASE_URL') and os.environ.get('SUPABASE_PUBLISHABLE_KEY'))}
+    return {'app': 'monitor-precos', 'mode': 'cloud', 'region': os.environ.get('VERCEL_REGION', 'local'), 'collection_version': '2026-10-14-clamper-v1', 'configured': bool(os.environ.get('SUPABASE_URL') and os.environ.get('SUPABASE_PUBLISHABLE_KEY'))}
 
 
 @app.get('/')
@@ -648,3 +648,4 @@ async def push(data: dict = Body(...), repo=Depends(repository)):
 
 
 app.mount('/assets', StaticFiles(directory=ASSETS), name='assets')
+

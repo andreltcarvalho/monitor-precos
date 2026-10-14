@@ -100,12 +100,23 @@ def brand_ignored(component: dict, brand: str | None) -> bool:
     return brand is not None and brand in ignored
 
 
+def electrical_product_text(value: str) -> str:
+    """Grafias de marca, corrente e plugue dos protetores Clamper."""
+    value = normalized(value)
+    value = re.sub(r'\bi?clamper\b', 'clamper', value)
+    value = re.sub(r'\b(\d+)\s*(?:a|amperes?|amps?)\b', r'\1a', value)
+    value = re.sub(r'\b([23])\s*(?:p|pinos?)\b', r'\1p', value)
+    return value
+
+
 def matches(component: dict, text: str) -> bool:
     if brand_ignored(component, detect_brand(text)):
         return False
     text = normalized(text)
     kind = component['kind']
     query = normalized(component.get('query') or '')
+    if kind == 'custom' and re.search(r'\bi?clamper\b', query):
+        text, query = electrical_product_text(text), electrical_product_text(query)
     # Store titles spell GPU families as RTX5060Ti / RX9060XT and memory as 16G.
     # Normalize these known families only; arbitrary model codes stay intact.
     gpu_family = r'\b(rtx|rx)\s*(\d{4})(?:\s*(ti|super|xtx|xt))?\b'
@@ -821,3 +832,4 @@ class Store:
 
     def close(self):
         self.db.close()
+

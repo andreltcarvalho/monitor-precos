@@ -567,6 +567,14 @@ class Shops:
 
     async def _search_page(self, shop: str, component: dict) -> tuple[str, str]:
         query = component['query']
+        if component.get('kind') == 'custom' and re.search(r'\bi?clamper\b', normalized(query)):
+            from core import electrical_product_text
+            # A busca das lojas não exige os sufixos técnicos nem a pontuação.
+            # A identificação do anúncio continua exigindo a consulta original.
+            query = electrical_product_text(query)
+            query = re.sub(r'\blcf\b', '', query)
+            query = re.sub(r'[,;]+', ' ', query)
+            query = ' '.join(query.split())
         if shop == 'KaBuM' and re.search(r'\bwater\s+cooler\b', normalized(query)):
             query = re.sub(r'\b(120|240|280|360|420)\b(?!\s*mm)', r'\1mm', query, flags=re.I)
         urls = {'Pichau': 'https://www.pichau.com.br/search?q=' + quote(query),
@@ -577,8 +585,11 @@ class Shops:
                 'Terabyte Shop': 'https://www.terabyteshop.com.br/busca?str=' + quote(query)}
         url = urls[shop]
         html, resolved = await self.fetch(url)
-        text = normalized(BeautifulSoup(html, 'html.parser').get_text(' ', strip=True))
-        if shop == 'Amazon' and any(marker in text for marker in ('digite os caracteres', 'enter the characters', 'robot check', 'algo deu errado')):
+        soup = BeautifulSoup(html, 'html.parser')
+        text = normalized(soup.get_text(' ', strip=True))
+        refresh = soup.find('meta', attrs={'http-equiv': re.compile('^refresh$', re.I)})
+        browser_verification = refresh and 'bm-verify=' in refresh.get('content', '')
+        if shop == 'Amazon' and (browser_verification or any(marker in text for marker in ('digite os caracteres', 'enter the characters', 'robot check', 'algo deu errado'))):
             raise ValueError('Amazon bloqueou a consulta pública. Ofertas do Telegram continuam disponíveis; busca direta não foi concluída.')
         if shop == 'Mercado Livre' and 'para continuar, acesse sua conta' in text:
             raise ValueError('Mercado Livre exigiu login para esta consulta. Ofertas do Telegram continuam disponíveis; busca direta não foi concluída.')
@@ -655,3 +666,4 @@ class Shops:
         await self.client.aclose()
         if self.ml_browser:
             await self.ml_browser.close()
+
